@@ -7,7 +7,6 @@ struct MethaneReading: Identifiable, Codable, Hashable {
     let ppm: Double
     let temperatureC: Double?
     let humidityRH: Double?
-    let batteryPercent: Int?
 
     init(
         id: UUID = UUID(),
@@ -15,8 +14,7 @@ struct MethaneReading: Identifiable, Codable, Hashable {
         rawValue: Double,
         ppm: Double,
         temperatureC: Double? = nil,
-        humidityRH: Double? = nil,
-        batteryPercent: Int? = nil
+        humidityRH: Double? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -24,7 +22,6 @@ struct MethaneReading: Identifiable, Codable, Hashable {
         self.ppm = ppm
         self.temperatureC = temperatureC
         self.humidityRH = humidityRH
-        self.batteryPercent = batteryPercent
     }
 }
 

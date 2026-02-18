@@ -17,11 +17,15 @@ struct AIMnetMethaneApp: App {
                 DeviceListView(bleManager: bleManager)
                     .navigationSplitViewColumnWidth(min: 300, ideal: 360)
             } detail: {
-                LiveMonitorView(
-                    bleManager: bleManager,
-                    sessionStore: sessionStore
-                )
+                NavigationStack {
+                    LiveMonitorView(
+                        bleManager: bleManager,
+                        sessionStore: sessionStore
+                    )
+                }
             }
+            .preferredColorScheme(.dark)
+            .tint(FuturisticPalette.cyan)
         }
     }
 }

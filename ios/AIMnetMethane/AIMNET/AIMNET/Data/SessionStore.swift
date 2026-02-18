@@ -109,15 +109,14 @@ final class SessionStore: ObservableObject {
     private func makeCSV(session: MethaneMonitoringSession) -> String {
         let formatter = ISO8601DateFormatter()
         var lines: [String] = []
-        lines.append("timestamp,rawValue,ppm,temperatureC,humidityRH,batteryPercent")
+        lines.append("timestamp,rawValue,ppm,temperatureRaw,humidityRaw")
 
         for reading in session.readings {
             let timestamp = formatter.string(from: reading.timestamp)
             let temperature = reading.temperatureC.map { String($0) } ?? ""
             let humidity = reading.humidityRH.map { String($0) } ?? ""
-            let battery = reading.batteryPercent.map { String($0) } ?? ""
             lines.append(
-                "\(timestamp),\(reading.rawValue),\(reading.ppm),\(temperature),\(humidity),\(battery)"
+                "\(timestamp),\(reading.rawValue),\(reading.ppm),\(temperature),\(humidity)"
             )
         }
 
