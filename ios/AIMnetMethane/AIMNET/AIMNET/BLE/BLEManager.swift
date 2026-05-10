@@ -147,6 +147,7 @@ final class BLEManager: NSObject, ObservableObject {
     private var timedSampleTimer: Timer?
     private var timedSampleStartedAt: Date?
     private var lastTelemetryUpdateAt: Date?
+    private var isScreenshotDemoMode = false
 
     private var activeDeviceIdByPeripheral: [UUID: String] = [:]
     private var connectionStartDatesByDeviceId: [String: Date] = [:]
@@ -733,10 +734,75 @@ final class BLEManager: NSObject, ObservableObject {
             transition(to: .streaming, message: "Receiving H2S telemetry.")
         }
     }
+
+    func loadScreenshotDemoData(preferredDeviceType: String?) {
+        isScreenshotDemoMode = true
+        clearLiveTelemetry()
+        bluetoothState = .poweredOn
+        connectionState = .streaming
+        connectionDurationSec = 742
+        statusMessage = "Receiving live telemetry."
+        latestPayloadDeviceName = preferredDeviceType == "h2s" ? "AIMNet H2S fsb002" : "AIMNet fsb001"
+
+        let baseDate = Date().addingTimeInterval(-12 * 60)
+        if preferredDeviceType == "h2s" {
+            for index in 0..<96 {
+                let time = baseDate.addingTimeInterval(Double(index) * 7.5)
+                let progress = Double(index) / 95.0
+                let sensor1 = 28_000 + sin(progress * .pi * 2.1) * 2_400 + progress * 11_000
+                let sensor2Peak = 10_000 + sin(min(progress, 0.45) / 0.45 * .pi) * 6_200
+                let sensor2 = progress < 0.5 ? sensor2Peak : 16_000 - (progress - 0.5) * 12_000
+                processH2SPayload(
+                    H2SPayload(
+                        deviceTime: 24_000 + index,
+                        primaryPPB: max(0, sensor1),
+                        secondaryPPB: max(8_800, sensor2)
+                    ),
+                    at: time
+                )
+            }
+            latestRawPayload = "AIMNet H2S fsb002,24095,39880,10120"
+            latestRawFields = ["AIMNet H2S fsb002", "24095", "39880", "10120"]
+        } else {
+            for index in 0..<120 {
+                let time = baseDate.addingTimeInterval(Double(index) * 6)
+                let phase = Double(index) / 10.0
+                let payload = MethanePayload(
+                    deviceTime: 18_200 + index,
+                    h2oSensor1: 942 + sin(phase * 0.8) * 34,
+                    h2oSensor2: 1_112 + cos(phase * 0.75) * 29,
+                    co2Sensor: 622 + sin(phase * 0.45) * 22,
+                    pressureRaw: 101_380 + sin(phase * 0.35) * 120,
+                    temperature1: 2_420 + sin(phase * 0.6) * 38,
+                    temperature2: 2_432 + cos(phase * 0.55) * 34,
+                    temperature3: 2_391 + sin(phase * 0.5) * 31,
+                    humidityRaw: 4_180 + cos(phase * 0.35) * 185,
+                    temperature4: 2_451 + sin(phase * 0.7) * 32,
+                    h2oSignal: 3_420 + sin(phase * 0.7) * 190,
+                    ch4Signal: 1_820 + sin(phase) * 90 + Double(index % 13) * 5,
+                    co2Signal: 2_610 + cos(phase * 0.85) * 150
+                )
+                processMethanePayload(payload, at: time)
+            }
+            latestRawPayload = "AIMNet fsb001,18319,start,941,1118,635,101412,2425,2439,0,2388,4196,2456,end,0,3484,1908,2682"
+            latestRawFields = ["AIMNet fsb001", "18319", "start", "941", "1118", "635", "101412", "2425", "2439", "0", "2388", "4196", "2456", "end", "0", "3484", "1908", "2682"]
+            let sampleReadings = Array(liveReadings.suffix(30))
+            lastTimedSample = MethaneTimedSample(
+                startedAt: baseDate.addingTimeInterval(8 * 60),
+                endedAt: baseDate.addingTimeInterval(11 * 60),
+                targetDurationSec: 180,
+                readings: sampleReadings
+            )
+        }
+    }
 }
 
 extension BLEManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        if isScreenshotDemoMode {
+            bluetoothState = .poweredOn
+            return
+        }
         bluetoothState = central.state
         if central.state != .poweredOn {
             stopScanning()
@@ -853,7 +919,13 @@ extension BLEManager: CBCentralManagerDelegate {
         }
 
         Task { @MainActor in
-            _ = sessionStore.endSession()
+            guard let session = sessionStore.endSession() else { return }
+            do {
+                let exportedURL = try sessionStore.exportCSVOnDisconnect(session: session)
+                statusMessage = "Disconnected. CSV saved: \(exportedURL.lastPathComponent)"
+            } catch {
+                statusMessage = "Disconnected. Auto CSV export failed: \(error.localizedDescription)"
+            }
         }
     }
 }

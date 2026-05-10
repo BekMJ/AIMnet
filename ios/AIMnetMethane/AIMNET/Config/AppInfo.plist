@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>This app uses Bluetooth to connect to methane monitoring sensors.</string>
+    <string>This app uses Bluetooth to connect to AIMNet methane and H2S monitoring sensors.</string>
     <key>NSBluetoothPeripheralUsageDescription</key>
-    <string>This app reads methane telemetry from nearby BLE sensors.</string>
+    <string>This app reads methane and H2S telemetry from nearby AIMNet BLE sensors.</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>bluetooth-central</string>

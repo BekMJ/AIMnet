@@ -1,6 +1,7 @@
 import Charts
 import Foundation
 import SwiftUI
+import UIKit
 
 private struct ChartPoint: Identifiable {
     let id: Int
@@ -8,38 +9,71 @@ private struct ChartPoint: Identifiable {
     let value: Double
 }
 
+nonisolated private enum H2SDisplayCalibration {
+    static let sensor1RawAt25PPM = 40_000.0
+    static let sensor2RawAt25PPM = 10_000.0
+    static let referencePPM = 25.0
+
+    static func sensor1PPM(fromRaw raw: Double) -> Double {
+        max(0, raw * referencePPM / sensor1RawAt25PPM)
+    }
+
+    static func sensor2PPM(fromRaw raw: Double) -> Double {
+        max(0, raw * referencePPM / sensor2RawAt25PPM)
+    }
+}
+
 struct LiveMonitorView: View {
     @ObservedObject var bleManager: BLEManager
     @ObservedObject var sessionStore: SessionStore
+    var initialScrollAnchor: String? = nil
 
     @State private var exportMessage: String?
+    @State private var pendingShareExport: ShareExport?
 
     var body: some View {
         ZStack {
             FuturisticBackground()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    statusCard
-                    rawPayloadCard
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        statusCard
+                            .id("status")
+                        rawPayloadCard
+                            .id("raw")
 
-                    switch bleManager.detectedDeviceType {
-                    case .methane:
-                        methaneMetricsCard
-                        methaneChartsCard
-                        timedSampleCard
-                    case .h2s:
-                        h2sMetricsCard
-                        h2sChartsCard
-                    case .unknown:
-                        awaitingTelemetryCard
+                        switch bleManager.detectedDeviceType {
+                        case .methane:
+                            methaneMetricsCard
+                                .id("methaneMetrics")
+                            methaneChartsCard
+                                .id("methaneCharts")
+                            timedSampleCard
+                                .id("timedSample")
+                        case .h2s:
+                            h2sMetricsCard
+                                .id("h2sMetrics")
+                            h2sChartsCard
+                                .id("h2sCharts")
+                        case .unknown:
+                            awaitingTelemetryCard
+                                .id("telemetry")
+                        }
+
+                        sessionCard
+                            .id("session")
                     }
-
-                    sessionCard
+                    .padding(16)
                 }
-                .padding(16)
+                .scrollIndicators(.hidden)
+                .onAppear {
+                    guard let initialScrollAnchor else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        proxy.scrollTo(initialScrollAnchor, anchor: .top)
+                    }
+                }
             }
-            .scrollIndicators(.hidden)
         }
         .navigationTitle("Live Monitor")
         .overlay(alignment: .bottom) {
@@ -47,6 +81,9 @@ struct LiveMonitorView: View {
                 FuturisticToast(message: exportMessage)
                     .padding(.bottom, 10)
             }
+        }
+        .sheet(item: $pendingShareExport) { export in
+            ActivityView(activityItems: [export.url])
         }
     }
 
@@ -314,7 +351,7 @@ struct LiveMonitorView: View {
     }
 
     private var h2sMetricsCard: some View {
-        FuturisticPanel("H2S Raw Fields", icon: "aqi.medium") {
+        FuturisticPanel("H2S Estimated PPM", icon: "aqi.medium") {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 FuturisticMetricTile(
                     title: "Device Time",
@@ -322,13 +359,19 @@ struct LiveMonitorView: View {
                     accent: FuturisticPalette.cyan
                 )
                 FuturisticMetricTile(
-                    title: "H2S Sensor 1",
-                    value: metricValue(bleManager.latestH2SPrimary),
+                    title: "H2S Sensor 1 PPM",
+                    value: metricValue(
+                        bleManager.latestH2SPrimary.map(H2SDisplayCalibration.sensor1PPM),
+                        format: "%.2f"
+                    ),
                     accent: FuturisticPalette.warning
                 )
                 FuturisticMetricTile(
-                    title: "H2S Sensor 2",
-                    value: metricValue(bleManager.latestH2SSecondary),
+                    title: "H2S Sensor 2 PPM",
+                    value: metricValue(
+                        bleManager.latestH2SSecondary.map(H2SDisplayCalibration.sensor2PPM),
+                        format: "%.2f"
+                    ),
                     accent: FuturisticPalette.magenta
                 )
             }
@@ -338,18 +381,18 @@ struct LiveMonitorView: View {
     private var h2sChartsCard: some View {
         VStack(spacing: 12) {
             chartPanel(
-                title: "H2S Sensor 1 (Raw)",
+                title: "H2S Sensor 1 (PPM)",
                 icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.h2sPrimaryData,
+                values: bleManager.h2sPrimaryData.map(H2SDisplayCalibration.sensor1PPM),
                 timestamps: bleManager.h2sTimestamps,
                 tint: FuturisticPalette.warning,
                 height: 170
             )
 
             chartPanel(
-                title: "H2S Sensor 2 (Raw)",
+                title: "H2S Sensor 2 (PPM)",
                 icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.h2sSecondaryData,
+                values: bleManager.h2sSecondaryData.map(H2SDisplayCalibration.sensor2PPM),
                 timestamps: bleManager.h2sTimestamps,
                 tint: FuturisticPalette.magenta,
                 height: 170
@@ -423,13 +466,13 @@ struct LiveMonitorView: View {
                     .foregroundStyle(.white.opacity(0.72))
 
                 HStack {
-                    Button("Export CSV") {
-                        export(session: latest, format: .csv)
+                    Button("Share CSV") {
+                        share(session: latest, format: .csv)
                     }
                     .buttonStyle(NeonButtonStyle(tint: FuturisticPalette.success))
 
-                    Button("Export JSON") {
-                        export(session: latest, format: .json)
+                    Button("Share JSON") {
+                        share(session: latest, format: .json)
                     }
                     .buttonStyle(NeonButtonStyle(tint: FuturisticPalette.purple))
                 }
@@ -460,19 +503,6 @@ struct LiveMonitorView: View {
                     .interpolationMethod(.catmullRom)
                     .foregroundStyle(tint)
                     .lineStyle(.init(lineWidth: 2))
-
-                    AreaMark(
-                        x: .value("Time", point.timestamp),
-                        y: .value("Value", point.value)
-                    )
-                    .interpolationMethod(.catmullRom)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [tint.opacity(0.3), tint.opacity(0.05)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
                 }
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
@@ -495,6 +525,10 @@ struct LiveMonitorView: View {
                     }
                 }
                 .chartYScale(domain: yDomain)
+                .chartPlotStyle { plotArea in
+                    plotArea
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
                 .frame(height: height)
             }
         }
@@ -563,10 +597,11 @@ struct LiveMonitorView: View {
         }
     }
 
-    private func export(session: MethaneMonitoringSession, format: SessionExportFormat) {
+    private func share(session: MethaneMonitoringSession, format: SessionExportFormat) {
         do {
             let url = try sessionStore.export(session: session, format: format)
-            exportMessage = "Exported \(format.rawValue.uppercased()) to \(url.lastPathComponent)"
+            pendingShareExport = ShareExport(url: url)
+            exportMessage = "Choose where to share \(url.lastPathComponent)"
         } catch {
             exportMessage = "Export failed: \(error.localizedDescription)"
         }
@@ -578,4 +613,19 @@ struct LiveMonitorView: View {
         let seconds = Int(duration) % 60
         return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
+}
+
+private struct ShareExport: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
