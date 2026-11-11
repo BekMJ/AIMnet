@@ -3,10 +3,26 @@ import Foundation
 struct MethaneReading: Identifiable, Codable, Hashable {
     let id: UUID
     let timestamp: Date
+    /// Optical CH4 counts from the sensor (falls when methane rises).
     let rawValue: Double
+    /// Methane in ppm from the K96 model (display rule: max(0, x), values below 0.5 shown as 0).
+    /// Sessions recorded before the model was added stored the raw counts here.
     let ppm: Double
+    /// NTC1 (the model's temperature input), °C.
     let temperatureC: Double?
     let humidityRH: Double?
+
+    // Added with the K96 model; optional so older saved sessions still load.
+    var frame: K96Frame?
+    var modelKey: String?
+    /// Unclipped model reading (can be negative).
+    var ppmRaw: Double?
+    var zeroed: Bool?
+    var modelState: String?
+    /// 0 ok, 1 caution, 2 unreliable.
+    var reliability: Int?
+    var reliabilityReason: String?
+    var expectedAbsErrPPM: Double?
 
     init(
         id: UUID = UUID(),
@@ -23,29 +39,25 @@ struct MethaneReading: Identifiable, Codable, Hashable {
         self.temperatureC = temperatureC
         self.humidityRH = humidityRH
     }
-}
 
-struct MethaneCalibrationProfile: Codable, Hashable {
-    let slopeRawPerPPM: Double
-    let interceptRaw: Double
-    let minimumPPM: Double
-    let maximumPPM: Double?
-
-    static let defaultLinear = MethaneCalibrationProfile(
-        slopeRawPerPPM: 1.0,
-        interceptRaw: 0.0,
-        minimumPPM: 0.0,
-        maximumPPM: nil
-    )
-
-    func ppm(fromRaw rawValue: Double) -> Double {
-        guard slopeRawPerPPM > 0 else { return minimumPPM }
-        let estimated = (rawValue - interceptRaw) / slopeRawPerPPM
-        let clampedLow = max(minimumPPM, estimated)
-        if let maximumPPM {
-            return min(maximumPPM, clampedLow)
+    init(frame: K96Frame, output: K96Output?, modelKey: String?, timestamp: Date) {
+        self.init(
+            timestamp: timestamp,
+            rawValue: frame.CH4,
+            ppm: output?.ppm ?? .nan,
+            temperatureC: frame.ntc1C,
+            humidityRH: frame.humidityRH
+        )
+        self.frame = frame
+        self.modelKey = modelKey
+        if let output {
+            ppmRaw = output.ppmRaw
+            zeroed = output.zeroed
+            modelState = output.state
+            reliability = output.reliability
+            reliabilityReason = output.reliabilityReason
+            expectedAbsErrPPM = output.expectedAbsErrPPM.isNaN ? nil : output.expectedAbsErrPPM
         }
-        return clampedLow
     }
 }
 
@@ -104,17 +116,91 @@ struct MethaneTimedSample: Identifiable, Codable, Hashable {
         max(0, endedAt.timeIntervalSince(startedAt))
     }
 
+    private var finitePPM: [Double] { readings.map(\.ppm).filter(\.isFinite) }
+
     var averagePPM: Double {
-        guard !readings.isEmpty else { return 0 }
-        let sum = readings.reduce(0.0) { $0 + $1.ppm }
-        return sum / Double(readings.count)
+        let v = finitePPM
+        guard !v.isEmpty else { return 0 }
+        return v.reduce(0, +) / Double(v.count)
     }
 
-    var minPPM: Double {
-        readings.map(\.ppm).min() ?? 0
+    var minPPM: Double { finitePPM.min() ?? 0 }
+    var maxPPM: Double { finitePPM.max() ?? 0 }
+
+    /// True when every reading came from a zeroed model with reliability 0.
+    var allReliable: Bool { !readings.isEmpty && readings.allSatisfy { $0.zeroed == true && $0.reliability == 0 } }
+}
+
+/// CSV / JSON writers shared by session and timed-sample exports.
+enum MethaneExport {
+    static let csvHeader = (["timestamp", "model", "ch4_ppm", "ch4_ppm_raw", "zeroed", "model_state", "reliability",
+                             "reliability_reason", "expected_abs_err_ppm"] + K96Frame.fieldNames).joined(separator: ",")
+
+    static func csv(readings: [MethaneReading]) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var lines = [csvHeader]
+        lines.reserveCapacity(readings.count + 1)
+        for r in readings {
+            var cols: [String] = [
+                formatter.string(from: r.timestamp),
+                r.modelKey ?? "",
+                num(r.ppm),
+                num(r.ppmRaw),
+                r.zeroed.map { $0 ? "1" : "0" } ?? "",
+                r.modelState ?? "",
+                r.reliability.map(String.init) ?? "",
+                quote(r.reliabilityReason ?? ""),
+                num(r.expectedAbsErrPPM),
+            ]
+            if let f = r.frame {
+                cols += f.values.map { String(Int($0)) }
+            } else {
+                // sessions recorded before the K96 model: only the CH4 counts were kept
+                var v = Array(repeating: "", count: 15)
+                v[13] = num(r.rawValue)
+                cols += v
+            }
+            lines.append(cols.joined(separator: ","))
+        }
+        return lines.joined(separator: "\n") + "\n"
     }
 
-    var maxPPM: Double {
-        readings.map(\.ppm).max() ?? 0
+    static func jsonEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, enc in
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var c = enc.singleValueContainer()
+            try c.encode(f.string(from: date))
+        }
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }
+
+    static func jsonDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { dec in
+            let s = try dec.singleValueContainer().decode(String.self)
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = f.date(from: s) { return d }
+            f.formatOptions = [.withInternetDateTime]
+            if let d = f.date(from: s) { return d }
+            throw DecodingError.dataCorrupted(.init(codingPath: dec.codingPath, debugDescription: "bad date \(s)"))
+        }
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
+        return decoder
+    }
+
+    private static func num(_ x: Double?) -> String {
+        guard let x, x.isFinite else { return "" }
+        return String(x)
+    }
+
+    private static func quote(_ s: String) -> String {
+        guard s.contains(",") || s.contains("\"") || s.contains("\n") else { return s }
+        return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 }

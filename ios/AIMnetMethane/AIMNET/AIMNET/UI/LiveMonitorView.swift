@@ -45,6 +45,10 @@ struct LiveMonitorView: View {
 
                         switch bleManager.detectedDeviceType {
                         case .methane:
+                            methaneModelCard
+                                .id("methaneModel")
+                            methaneSetupCard
+                                .id("methaneSetup")
                             methaneMetricsCard
                                 .id("methaneMetrics")
                             methaneChartsCard
@@ -166,187 +170,184 @@ struct LiveMonitorView: View {
         }
     }
 
+    private var methaneModelCard: some View {
+        let out = bleManager.latestModelOutput
+        let status = bleManager.modelStatus
+        return FuturisticPanel("Methane (K96 model)", icon: "flame.fill") {
+            if let error = bleManager.modelLoadError {
+                Text("Methane model not loaded: \(error)")
+                    .font(.caption)
+                    .foregroundStyle(FuturisticPalette.danger)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(out.map { String(format: "%.1f", $0.ppm) } ?? "--")
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(reliabilityColor(out?.reliability))
+                    Text("ppm CH4 · \(bleManager.recommendedModelLabel)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+                Spacer()
+                StatusChip(text: readinessText(out: out, status: status), color: reliabilityColor(out?.reliability))
+            }
+
+            if let out {
+                Text(out.reliabilityReason)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.82))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    FuturisticMetricTile(
+                        title: "Not clipped (ppm)",
+                        value: String(format: "%.1f", out.ppmRaw),
+                        accent: FuturisticPalette.cyan
+                    )
+                    FuturisticMetricTile(
+                        title: "Expected error (ppm)",
+                        value: out.expectedAbsErrPPM.isNaN ? "--" : String(format: "±%.1f", out.expectedAbsErrPPM),
+                        accent: FuturisticPalette.purple
+                    )
+                    FuturisticMetricTile(
+                        title: "Detector state",
+                        value: stateLabel(out.state),
+                        accent: FuturisticPalette.magenta
+                    )
+                    FuturisticMetricTile(
+                        title: "Zero",
+                        value: status.zeroed ? "at \(Int(status.zeroCounter ?? 0)) s" : (status.holding ? "waiting" : "not yet"),
+                        accent: FuturisticPalette.success
+                    )
+                }
+                Text("Readings below 0.5 ppm show as 0; small concentrations show only in the not-clipped value. One zero per power-on, taken after warm-up and never changed.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Waiting for the first methane frame.")
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+        }
+    }
+
+    private var methaneSetupCard: some View {
+        FuturisticPanel("Methane Model Setup", icon: "slider.horizontal.3") {
+            Picker("Sample tube", selection: $bleManager.tubeAtInlet) {
+                Text("At device inlet").tag(true)
+                Text("Old position").tag(false)
+            }
+            .pickerStyle(.segmented)
+            Text("Must match the real installation: with the wrong setting the reading can be off by tens to hundreds of ppm. If unsure, use Old position.")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Toggle("Manual zero", isOn: $bleManager.manualZero)
+                .tint(FuturisticPalette.cyan)
+                .foregroundStyle(.white)
+            if bleManager.manualZero {
+                Button("Start zero now") {
+                    bleManager.startZeroNow()
+                }
+                .buttonStyle(NeonButtonStyle(tint: FuturisticPalette.success))
+                .disabled(!bleManager.modelStatus.ready || bleManager.modelStatus.zeroed)
+                Text("Start the zero with the pump already at the speed you will use, in gas without methane, and do not change the pump speed afterwards.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            let d = bleManager.modelStatus.detail
+            if !d.isEmpty && !bleManager.modelStatus.zeroed {
+                Text(String(format: "Stability: dT %.2f C / 5 min (< 0.5), dH2O %.0f / 2 min (< 150), df2 %.0f / 2 min (< 20), %.1f min since power-on (>= 5)",
+                            d["dT_5min"] ?? .nan, d["dH2O_2min"] ?? .nan, d["df2_2min"] ?? .nan, d["min_since_start"] ?? .nan))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     private var methaneMetricsCard: some View {
-        FuturisticPanel("Methane Raw Fields", icon: "flame.fill") {
+        let f = bleManager.latestFrame
+        return FuturisticPanel("Methane Sensor Channels", icon: "list.bullet.rectangle") {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                FuturisticMetricTile(
-                    title: "Device Time",
-                    value: bleManager.latestDeviceTime.map(String.init) ?? "--",
-                    accent: FuturisticPalette.cyan
-                )
-                FuturisticMetricTile(
-                    title: "CH4 Signal",
-                    value: metricValue(bleManager.latestCH4Signal),
-                    accent: FuturisticPalette.success
-                )
-                FuturisticMetricTile(
-                    title: "H2O Sensor 1",
-                    value: metricValue(bleManager.latestH2OSensor1),
-                    accent: FuturisticPalette.cyan
-                )
-                FuturisticMetricTile(
-                    title: "H2O Sensor 2",
-                    value: metricValue(bleManager.latestH2OSensor2),
-                    accent: FuturisticPalette.cyan
-                )
-                FuturisticMetricTile(
-                    title: "CO2 Sensor",
-                    value: metricValue(bleManager.latestCO2Sensor),
-                    accent: FuturisticPalette.warning
-                )
-                FuturisticMetricTile(
-                    title: "Pressure (kPa)",
-                    value: metricValue(bleManager.latestPressureKPa, format: "%.2f"),
-                    accent: FuturisticPalette.purple
-                )
-                FuturisticMetricTile(
-                    title: "Temp 1 (C)",
-                    value: metricValue(bleManager.latestTemperature1C, format: "%.2f"),
-                    accent: FuturisticPalette.magenta
-                )
-                FuturisticMetricTile(
-                    title: "Temp 2 (C)",
-                    value: metricValue(bleManager.latestTemperature2C, format: "%.2f"),
-                    accent: FuturisticPalette.magenta
-                )
-                FuturisticMetricTile(
-                    title: "Temp 3 (C)",
-                    value: metricValue(bleManager.latestTemperature3C, format: "%.2f"),
-                    accent: FuturisticPalette.magenta
-                )
-                FuturisticMetricTile(
-                    title: "Temp 4 (C)",
-                    value: metricValue(bleManager.latestTemperature4C, format: "%.2f"),
-                    accent: FuturisticPalette.magenta
-                )
-                FuturisticMetricTile(
-                    title: "Humidity (%RH)",
-                    value: metricValue(bleManager.latestHumidityRH, format: "%.2f"),
-                    accent: FuturisticPalette.cyan
-                )
-                FuturisticMetricTile(
-                    title: "H2O Signal",
-                    value: metricValue(bleManager.latestH2OSignal),
-                    accent: FuturisticPalette.purple
-                )
-                FuturisticMetricTile(
-                    title: "CO2 Signal",
-                    value: metricValue(bleManager.latestCO2Signal),
-                    accent: FuturisticPalette.warning
-                )
+                FuturisticMetricTile(title: "Device counter (s)", value: metricValue(f?.cnt), accent: FuturisticPalette.cyan)
+                FuturisticMetricTile(title: "Optical CH4", value: metricValue(f?.CH4), accent: FuturisticPalette.success)
+                FuturisticMetricTile(title: "Optical H2O", value: metricValue(f?.H2O), accent: FuturisticPalette.cyan)
+                FuturisticMetricTile(title: "Optical CO2", value: metricValue(f?.CO2), accent: FuturisticPalette.warning)
+                FuturisticMetricTile(title: "NTC1 (C)", value: metricValue(f?.ntc1C, format: "%.2f"), accent: FuturisticPalette.magenta)
+                FuturisticMetricTile(title: "Gas temp T3 (C)", value: metricValue(f?.gasC, format: "%.2f"), accent: FuturisticPalette.magenta)
+                FuturisticMetricTile(title: "Die temp T2 (C)", value: metricValue(f?.dieC, format: "%.2f"), accent: FuturisticPalette.magenta)
+                FuturisticMetricTile(title: "T1 (C)", value: metricValue(f?.temperature1C, format: "%.2f"), accent: FuturisticPalette.magenta)
+                FuturisticMetricTile(title: "Pressure (hPa)", value: metricValue(f?.pressureHPa, format: "%.1f"), accent: FuturisticPalette.purple)
+                FuturisticMetricTile(title: "Humidity (%RH)", value: metricValue(f?.humidityRH, format: "%.2f"), accent: FuturisticPalette.cyan)
+                FuturisticMetricTile(title: "Firmware f1", value: metricValue(f?.f1), accent: FuturisticPalette.purple)
+                FuturisticMetricTile(title: "Firmware f2 (CO2 ch.)", value: metricValue(f?.f2), accent: FuturisticPalette.warning)
+                FuturisticMetricTile(title: "Firmware f3 (water)", value: metricValue(f?.f3), accent: FuturisticPalette.cyan)
             }
         }
     }
 
     private var methaneChartsCard: some View {
-        VStack(spacing: 12) {
-            chartPanel(
-                title: "CH4 Signal (Raw)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.methaneRawData,
-                timestamps: bleManager.methaneTimestamps,
-                tint: FuturisticPalette.success,
-                height: 220
-            )
+        let ts = bleManager.methaneTimestamps
+        return VStack(spacing: 12) {
+            chartPanel(title: "CH4 (ppm, \(bleManager.recommendedModelKey))", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.methanePPMData, timestamps: ts, tint: FuturisticPalette.success, height: 220)
+            chartPanel(title: "CH4 not clipped (ppm)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.methanePPMRawData, timestamps: ts, tint: FuturisticPalette.cyan, height: 170)
+            chartPanel(title: "Optical CH4 (counts)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.methaneRawData, timestamps: ts, tint: FuturisticPalette.success, height: 170)
+            chartPanel(title: "NTC1 (C)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.ntc1CData, timestamps: ts, tint: FuturisticPalette.magenta, height: 170)
+            chartPanel(title: "Gas temperature T3 (C)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.gasCData, timestamps: ts, tint: FuturisticPalette.magenta, height: 170)
+            chartPanel(title: "Die temperature T2 (C)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.dieCData, timestamps: ts, tint: FuturisticPalette.magenta, height: 170)
+            chartPanel(title: "Pressure (hPa)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.pressureHPaData, timestamps: ts, tint: FuturisticPalette.purple, height: 170)
+            chartPanel(title: "Humidity (%RH)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.humidityRHData, timestamps: ts, tint: FuturisticPalette.cyan, height: 170)
+            chartPanel(title: "Optical H2O (counts)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.opticalH2OData, timestamps: ts, tint: FuturisticPalette.cyan, height: 170)
+            chartPanel(title: "Optical CO2 (counts)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.opticalCO2Data, timestamps: ts, tint: FuturisticPalette.warning, height: 170)
+            chartPanel(title: "Firmware f2 (CO2 channel)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.f2Data, timestamps: ts, tint: FuturisticPalette.warning, height: 170)
+            chartPanel(title: "Firmware f3 (water)", icon: "chart.line.uptrend.xyaxis",
+                       values: bleManager.f3Data, timestamps: ts, tint: FuturisticPalette.cyan, height: 170)
+        }
+    }
 
-            chartPanel(
-                title: "Pressure (kPa)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.pressureKPaData,
-                timestamps: bleManager.pressureTimestamps,
-                tint: FuturisticPalette.purple,
-                height: 170
-            )
+    private func reliabilityColor(_ level: Int?) -> Color {
+        switch level {
+        case 0: return FuturisticPalette.success
+        case 1: return FuturisticPalette.warning
+        case 2: return FuturisticPalette.danger
+        default: return FuturisticPalette.cyan
+        }
+    }
 
-            chartPanel(
-                title: "Temperature 1 (C)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.temperatureCData,
-                timestamps: bleManager.temperatureTimestamps,
-                tint: FuturisticPalette.magenta,
-                height: 170
-            )
+    private func readinessText(out: K96Output?, status: MethaneModelStatus) -> String {
+        guard let out else { return "NO DATA" }
+        if !out.zeroed {
+            if status.holding { return status.ready ? "READY - START ZERO" : "NOT READY" }
+            return status.ready ? "ZEROING" : "WARMING UP"
+        }
+        switch out.reliability {
+        case 0: return "READY"
+        case 1: return "CAUTION"
+        default: return "NOT USABLE"
+        }
+    }
 
-            chartPanel(
-                title: "Temperature 2 (C)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.temperature2CData,
-                timestamps: bleManager.temperatureTimestamps,
-                tint: FuturisticPalette.magenta,
-                height: 170
-            )
-
-            chartPanel(
-                title: "Temperature 3 (C)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.temperature3CData,
-                timestamps: bleManager.temperatureTimestamps,
-                tint: FuturisticPalette.magenta,
-                height: 170
-            )
-
-            chartPanel(
-                title: "Temperature 4 (C)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.temperature4CData,
-                timestamps: bleManager.temperatureTimestamps,
-                tint: FuturisticPalette.magenta,
-                height: 170
-            )
-
-            chartPanel(
-                title: "Humidity (%RH)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.humidityRHData,
-                timestamps: bleManager.humidityTimestamps,
-                tint: FuturisticPalette.cyan,
-                height: 170
-            )
-
-            chartPanel(
-                title: "H2O Sensor 1 (Raw)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.waterData,
-                timestamps: bleManager.waterTimestamps,
-                tint: FuturisticPalette.cyan,
-                height: 170
-            )
-
-            chartPanel(
-                title: "H2O Sensor 2 (Raw)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.waterSecondaryData,
-                timestamps: bleManager.waterTimestamps,
-                tint: FuturisticPalette.cyan,
-                height: 170
-            )
-
-            chartPanel(
-                title: "CO2 Sensor (Raw)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.co2Data,
-                timestamps: bleManager.co2Timestamps,
-                tint: FuturisticPalette.warning,
-                height: 170
-            )
-
-            chartPanel(
-                title: "H2O Signal (Raw)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.h2oSignalData,
-                timestamps: bleManager.methaneTimestamps,
-                tint: FuturisticPalette.purple,
-                height: 170
-            )
-
-            chartPanel(
-                title: "CO2 Signal (Raw)",
-                icon: "chart.line.uptrend.xyaxis",
-                values: bleManager.co2SignalData,
-                timestamps: bleManager.methaneTimestamps,
-                tint: FuturisticPalette.warning,
-                height: 170
-            )
+    private func stateLabel(_ state: String) -> String {
+        switch state {
+        case "bench": return "cold start"
+        case "n2shift": return "hot restart"
+        case "airshift": return "shifted air"
+        default: return state
         }
     }
 
@@ -429,7 +430,7 @@ struct LiveMonitorView: View {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.72))
                 } else if let sample = bleManager.lastTimedSample {
-                    Text("Last sample: \(sample.readings.count) points, avg raw \(String(format: "%.2f", sample.averagePPM))")
+                    Text("Last sample: \(sample.readings.count) points, average \(String(format: "%.1f", sample.averagePPM)) ppm")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.72))
                 }
@@ -443,7 +444,7 @@ struct LiveMonitorView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Active device: \(active.deviceName)")
                         .foregroundStyle(.white)
-                    Text("Readings buffered: \(active.readings.count)")
+                    Text("Readings buffered: \(sessionStore.activeReadingCount)")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.72))
                 }
@@ -455,6 +456,13 @@ struct LiveMonitorView: View {
             } else {
                 Text("No active session.")
                     .foregroundStyle(.white.opacity(0.72))
+            }
+
+            if let rawURL = bleManager.currentRawLogURL {
+                Button("Share raw log (for k96/run_file.py)") {
+                    pendingShareExport = ShareExport(url: rawURL)
+                }
+                .buttonStyle(NeonButtonStyle(tint: FuturisticPalette.cyan))
             }
 
             if let latest = sessionStore.recentSessions.first {

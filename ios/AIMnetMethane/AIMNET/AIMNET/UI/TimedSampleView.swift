@@ -86,23 +86,23 @@ struct TimedSampleView: View {
         FuturisticPanel("Live Telemetry During Sample", icon: "waveform.path.ecg") {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 FuturisticMetricTile(
-                    title: "Current CH4",
-                    value: bleManager.latestCH4Signal.map { String(format: "%.0f", $0) } ?? "--",
+                    title: "Current CH4 (ppm)",
+                    value: bleManager.latestModelOutput.map { String(format: "%.1f", $0.ppm) } ?? "--",
                     accent: FuturisticPalette.cyan
                 )
                 FuturisticMetricTile(
-                    title: "Current Raw",
-                    value: bleManager.methaneRawData.last.map { String(format: "%.0f", $0) } ?? "--",
+                    title: "Optical CH4",
+                    value: bleManager.latestFrame.map { String(format: "%.0f", $0.CH4) } ?? "--",
                     accent: FuturisticPalette.purple
                 )
                 FuturisticMetricTile(
-                    title: "Temperature (C)",
-                    value: bleManager.latestTemperature1C.map { String(format: "%.2f", $0) } ?? "--",
+                    title: "NTC1 (C)",
+                    value: bleManager.latestFrame.map { String(format: "%.2f", $0.ntc1C) } ?? "--",
                     accent: FuturisticPalette.magenta
                 )
                 FuturisticMetricTile(
-                    title: "Humidity (%RH)",
-                    value: bleManager.latestHumidityRH.map { String(format: "%.2f", $0) } ?? "--",
+                    title: "Reliability",
+                    value: bleManager.latestModelOutput.map { ["ok", "caution", "unreliable"][min(max($0.reliability, 0), 2)] } ?? "--",
                     accent: FuturisticPalette.cyan
                 )
             }
@@ -122,11 +122,16 @@ struct TimedSampleView: View {
                         value: "\(Int(sample.durationSeconds))s (target \(sample.targetDurationSec)s)"
                     )
                     detailRow(title: "Readings", value: "\(sample.readings.count)")
-                    detailRow(title: "Average raw", value: String(format: "%.2f", sample.averagePPM))
+                    detailRow(title: "Average CH4 (ppm)", value: String(format: "%.1f", sample.averagePPM))
                     detailRow(
-                        title: "Min / Max raw",
-                        value: "\(String(format: "%.2f", sample.minPPM)) / \(String(format: "%.2f", sample.maxPPM))"
+                        title: "Min / Max (ppm)",
+                        value: "\(String(format: "%.1f", sample.minPPM)) / \(String(format: "%.1f", sample.maxPPM))"
                     )
+                    if !sample.allReliable {
+                        Text("Some readings were not zeroed or not at reliability 0 - read with care.")
+                            .font(.caption)
+                            .foregroundStyle(FuturisticPalette.warning)
+                    }
                 }
 
                 HStack {
@@ -176,19 +181,10 @@ struct TimedSampleView: View {
     }
 
     private func exportCSV(sample: MethaneTimedSample) {
-        let formatter = ISO8601DateFormatter()
-        var lines: [String] = []
-        lines.append("timestamp,rawValue,ppm,temperatureRaw,humidityRaw")
-        for reading in sample.readings {
-            let timestamp = formatter.string(from: reading.timestamp)
-            let temperature = reading.temperatureC.map { String($0) } ?? ""
-            let humidity = reading.humidityRH.map { String($0) } ?? ""
-            lines.append("\(timestamp),\(reading.rawValue),\(reading.ppm),\(temperature),\(humidity)")
-        }
-
+        let csv = MethaneExport.csv(readings: sample.readings)
         let url = exportDirectory().appendingPathComponent("timed_sample_\(sample.id.uuidString).csv")
         do {
-            try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            try csv.write(to: url, atomically: true, encoding: .utf8)
             exportedCSVURL = url
             exportMessage = "CSV exported: \(url.lastPathComponent)"
         } catch {
@@ -197,9 +193,7 @@ struct TimedSampleView: View {
     }
 
     private func exportJSON(sample: MethaneTimedSample) {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let encoder = MethaneExport.jsonEncoder()
         let url = exportDirectory().appendingPathComponent("timed_sample_\(sample.id.uuidString).json")
 
         do {

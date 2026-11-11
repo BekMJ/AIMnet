@@ -109,6 +109,8 @@ private struct ScreenshotSceneView: View {
             return "status"
         case "raw-payload":
             return "raw"
+        case "methane-model":
+            return "methaneModel"
         case "methane-metrics":
             return "methaneMetrics"
         case "methane-charts":
