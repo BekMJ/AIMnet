@@ -185,7 +185,7 @@ struct LiveMonitorView: View {
                         .font(.system(size: 44, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(reliabilityColor(out?.reliability))
-                    Text("ppm CH4 · \(bleManager.recommendedModelLabel)")
+                    Text("ppm CH4 · \(bleManager.displayedModelLabel)")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.72))
                 }
@@ -234,6 +234,27 @@ struct LiveMonitorView: View {
 
     private var methaneSetupCard: some View {
         FuturisticPanel("Methane Model Setup", icon: "slider.horizontal.3") {
+            NavigationLink {
+                K96ModelPickerView(bleManager: bleManager)
+            } label: {
+                HStack {
+                    Text("Model")
+                        .foregroundStyle(.white.opacity(0.85))
+                    Spacer()
+                    Text(bleManager.selectedModelKey == BLEManager.automaticModelKey ? "Auto (\(bleManager.displayedModelKey))" : bleManager.displayedModelKey)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+            if bleManager.displayedModelMismatchesTube {
+                Text("\(bleManager.displayedModelKey) was trained for the tube \(bleManager.tubeAtInlet ? "at the old position" : "at the device inlet"), but the setting below says \(bleManager.tubeAtInlet ? "at the device inlet" : "old position"). Its reading can be off by tens to hundreds of ppm.")
+                    .font(.caption)
+                    .foregroundStyle(FuturisticPalette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Picker("Sample tube", selection: $bleManager.tubeAtInlet) {
                 Text("At device inlet").tag(true)
                 Text("Old position").tag(false)
@@ -293,7 +314,7 @@ struct LiveMonitorView: View {
     private var methaneChartsCard: some View {
         let ts = bleManager.methaneTimestamps
         return VStack(spacing: 12) {
-            chartPanel(title: "CH4 (ppm, \(bleManager.recommendedModelKey))", icon: "chart.line.uptrend.xyaxis",
+            chartPanel(title: "CH4 (ppm, \(bleManager.displayedModelKey))", icon: "chart.line.uptrend.xyaxis",
                        values: bleManager.methanePPMData, timestamps: ts, tint: FuturisticPalette.success, height: 220)
             chartPanel(title: "CH4 not clipped (ppm)", icon: "chart.line.uptrend.xyaxis",
                        values: bleManager.methanePPMRawData, timestamps: ts, tint: FuturisticPalette.cyan, height: 170)

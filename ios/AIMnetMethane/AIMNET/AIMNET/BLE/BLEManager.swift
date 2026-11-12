@@ -57,10 +57,10 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var methaneTimestamps: [Date] = []
     /// Optical CH4 counts.
     @Published var methaneRawData: [Double] = []
-    /// Model reading as displayed (max(0, x), < 0.5 shown as 0), recommended model.
-    @Published var methanePPMData: [Double] = []
-    /// Model reading not clipped at 0, recommended model.
-    @Published var methanePPMRawData: [Double] = []
+    /// Model readings per active model (displayed rule max(0, x), < 0.5 shown as 0), aligned with `methaneTimestamps`.
+    @Published private(set) var ppmSeriesByModel: [String: [Double]] = [:]
+    /// Model readings not clipped at 0, per active model.
+    @Published private(set) var ppmRawSeriesByModel: [String: [Double]] = [:]
     @Published var f1Data: [Double] = []
     @Published var f2Data: [Double] = []
     @Published var f3Data: [Double] = []
@@ -74,9 +74,9 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var opticalCO2Data: [Double] = []
 
     @Published var latestFrame: K96Frame?
-    /// Output of the recommended model for the configured tube position.
+    /// Output of the displayed model (`displayedModelKey`).
     @Published var latestModelOutput: K96Output?
-    /// Outputs of every shipped model, keyed by model key.
+    /// Outputs of the active models, keyed by model key.
     @Published var latestModelOutputs: [String: K96Output] = [:]
     @Published var modelStatus = MethaneModelStatus()
     @Published private(set) var modelLoadError: String?
@@ -86,9 +86,18 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var tubeAtInlet: Bool {
         didSet {
             UserDefaults.standard.set(tubeAtInlet, forKey: Self.tubeAtInletKey)
-            refreshRecommendedOutput()
+            applyActiveModels()
         }
     }
+
+    /// Model shown in the app: `automaticModelKey` = the config's recommendation for the tube position, else a model key.
+    @Published var selectedModelKey: String {
+        didSet {
+            UserDefaults.standard.set(selectedModelKey, forKey: Self.selectedModelDefaultsKey)
+            applyActiveModels()
+        }
+    }
+    static let automaticModelKey = "auto"
 
     /// Manual zero mode: the model holds its one-time zero until `startZeroNow()` (choose before the power-on is zeroed).
     @Published var manualZero: Bool {
@@ -128,9 +137,10 @@ final class BLEManager: NSObject, ObservableObject {
 
     private static let tubeAtInletKey = "k96.tubeAtInlet"
     private static let manualZeroKey = "k96.manualZero"
+    private static let selectedModelDefaultsKey = "k96.selectedModel"
 
     private let sessionStore: SessionStore
-    private let k96Models: [K96LoadedModel]
+    let k96Catalog: K96Catalog?
     /// Model state per device (serial when advertised, else the CoreBluetooth identifier). Kept across reconnects so a dropped
     /// link does not take a new zero in the middle of a power-on; a power cycle (counter going back) restarts the models.
     private var multiModels: [String: K96MultiModel] = [:]
@@ -160,12 +170,16 @@ final class BLEManager: NSObject, ObservableObject {
         let defaults = UserDefaults.standard
         tubeAtInlet = defaults.object(forKey: Self.tubeAtInletKey) as? Bool ?? true
         manualZero = defaults.bool(forKey: Self.manualZeroKey)
-        var loaded: [K96LoadedModel] = []
+        selectedModelKey = defaults.string(forKey: Self.selectedModelDefaultsKey) ?? Self.automaticModelKey
         var loadError: String?
-        for spec in [K96ModelSpec.aimnet17, K96ModelSpec.c5] {
-            do { loaded.append(try K96LoadedModel(spec: spec)) } catch { loadError = "\(error)" }
+        do {
+            let catalog = try K96Catalog()
+            k96Catalog = catalog
+            if !catalog.loadErrors.isEmpty { loadError = "some models were skipped: " + catalog.loadErrors.joined(separator: "; ") }
+        } catch {
+            k96Catalog = nil
+            loadError = "\(error)"
         }
-        k96Models = loaded
         super.init()
         modelLoadError = loadError
         centralManager = CBCentralManager(delegate: self, queue: nil)
@@ -175,9 +189,43 @@ final class BLEManager: NSObject, ObservableObject {
         invalidateAllTimers()
     }
 
-    var recommendedModelKey: String { tubeAtInlet ? K96ModelSpec.aimnet17.key : K96ModelSpec.c5.key }
+    /// Every model of the bundled config, in config order.
+    var availableModels: [K96ModelSpec] { k96Catalog?.models.map(\.spec) ?? [] }
 
-    var recommendedModelLabel: String { tubeAtInlet ? K96ModelSpec.aimnet17.label : K96ModelSpec.c5.label }
+    /// The config's recommended model for a tube position.
+    func recommendedModelKey(tubeAtInlet inlet: Bool) -> String {
+        k96Catalog?.recommendedKey(tubeAtInlet: inlet) ?? (inlet ? "AIMNet_1.7" : "C5")
+    }
+
+    var recommendedModelKey: String { recommendedModelKey(tubeAtInlet: tubeAtInlet) }
+
+    /// The model whose reading is shown and recorded.
+    var displayedModelKey: String {
+        if selectedModelKey != Self.automaticModelKey, k96Catalog?.model(selectedModelKey) != nil { return selectedModelKey }
+        return recommendedModelKey
+    }
+
+    var displayedModelSpec: K96ModelSpec? { k96Catalog?.model(displayedModelKey)?.spec }
+
+    var displayedModelLabel: String {
+        let k = displayedModelKey
+        let place = (displayedModelSpec?.isInletModel ?? false) ? "tube at inlet" : "old tube position"
+        return selectedModelKey == Self.automaticModelKey ? "\(k) (recommended, \(place))" : "\(k) (\(place))"
+    }
+
+    /// True when the displayed model was trained for a different tube position than the one configured.
+    var displayedModelMismatchesTube: Bool { (displayedModelSpec?.isInletModel ?? tubeAtInlet) != tubeAtInlet }
+
+    var methanePPMData: [Double] { ppmSeriesByModel[displayedModelKey] ?? [] }
+    var methanePPMRawData: [Double] { ppmRawSeriesByModel[displayedModelKey] ?? [] }
+
+    /// Models computed on every frame: the displayed one, the recommendation for the tube position, and AIMNet_1.7
+    /// (an inlet model with the physical water term, so the cross-model reliability notes are the same as in the Python UI).
+    private var activeModelKeys: [String] {
+        var keys = [displayedModelKey, recommendedModelKey]
+        if k96Catalog?.model("AIMNet_1.7") != nil { keys.append("AIMNet_1.7") }
+        return keys
+    }
 
     func startScanning() {
         guard centralManager.state == .poweredOn else {
@@ -231,8 +279,8 @@ final class BLEManager: NSObject, ObservableObject {
     func clearLiveTelemetry() {
         methaneTimestamps.removeAll()
         methaneRawData.removeAll()
-        methanePPMData.removeAll()
-        methanePPMRawData.removeAll()
+        ppmSeriesByModel = [:]
+        ppmRawSeriesByModel = [:]
         f1Data.removeAll()
         f2Data.removeAll()
         f3Data.removeAll()
@@ -455,9 +503,9 @@ final class BLEManager: NSObject, ObservableObject {
     // MARK: - Methane (K96) frames
 
     private func multiModel(for key: String) -> K96MultiModel? {
-        guard !k96Models.isEmpty else { return nil }
+        guard let k96Catalog, !k96Catalog.models.isEmpty else { return nil }
         if let mm = multiModels[key] { return mm }
-        let mm = K96MultiModel(models: k96Models)
+        let mm = K96MultiModel(catalog: k96Catalog, active: activeModelKeys)
         mm.setZeroMode(manual: manualZero)
         multiModels[key] = mm
         pendingRestore.insert(key)
@@ -465,7 +513,32 @@ final class BLEManager: NSObject, ObservableObject {
     }
 
     private func refreshRecommendedOutput() {
-        latestModelOutput = latestModelOutputs[recommendedModelKey]
+        latestModelOutput = latestModelOutputs[displayedModelKey]
+    }
+
+    /// Switch the computed models after a change of model or tube position. A model switched on mid power-on is rebuilt
+    /// by replaying the frames of the power-on, so its reading and zero are exactly as if it had run from the start.
+    private func applyActiveModels() {
+        let keys = activeModelKeys
+        let deviceKey = currentDeviceKey
+        let n = methaneTimestamps.count
+        for (k, mm) in multiModels {
+            let built = mm.setActive(keys, keepLast: k == deviceKey ? max(n, 1) : 1)
+            guard k == deviceKey else { continue }
+            for (model, outs) in built {
+                let tail = Array(outs.suffix(n))
+                let pad = Array(repeating: Double.nan, count: max(0, n - tail.count))
+                ppmSeriesByModel[model] = pad + tail.map(\.ppm)
+                ppmRawSeriesByModel[model] = pad + tail.map(\.ppmRaw)
+                if let last = outs.last { latestModelOutputs[model] = last }
+            }
+        }
+        for model in Array(ppmSeriesByModel.keys) where !keys.contains(model) {
+            ppmSeriesByModel[model] = nil
+            ppmRawSeriesByModel[model] = nil
+            latestModelOutputs[model] = nil
+        }
+        refreshRecommendedOutput()
     }
 
     private func refreshModelStatus() {
@@ -505,8 +578,7 @@ final class BLEManager: NSObject, ObservableObject {
                     statusMessage = "Methane model restored: \(n) frames of the current power-on replayed from \(used.count) file(s) (same zero)."
                 }
             }
-            let outs = mm.push(frame)
-            for (model, out) in zip(mm.models, outs) { outputs[model.spec.key] = out }
+            outputs = mm.push(frame)
             refreshModelStatus()
         }
         latestModelOutputs = outputs
@@ -515,8 +587,17 @@ final class BLEManager: NSObject, ObservableObject {
 
         appendCapped(timestamp, into: &methaneTimestamps)
         appendCapped(frame.CH4, into: &methaneRawData)
-        appendCapped(out?.ppm ?? .nan, into: &methanePPMData)
-        appendCapped(out?.ppmRaw ?? .nan, into: &methanePPMRawData)
+        var series = ppmSeriesByModel, rawSeries = ppmRawSeriesByModel
+        for (model, o) in outputs {
+            var s = series[model] ?? Array(repeating: .nan, count: methaneTimestamps.count - 1)
+            appendCapped(o.ppm, into: &s)
+            series[model] = s
+            var r = rawSeries[model] ?? Array(repeating: .nan, count: methaneTimestamps.count - 1)
+            appendCapped(o.ppmRaw, into: &r)
+            rawSeries[model] = r
+        }
+        ppmSeriesByModel = series
+        ppmRawSeriesByModel = rawSeries
         appendCapped(frame.f1, into: &f1Data)
         appendCapped(frame.f2, into: &f2Data)
         appendCapped(frame.f3, into: &f3Data)
@@ -529,7 +610,7 @@ final class BLEManager: NSObject, ObservableObject {
         appendCapped(frame.H2O, into: &opticalH2OData)
         appendCapped(frame.CO2, into: &opticalCO2Data)
 
-        let reading = MethaneReading(frame: frame, output: out, modelKey: out == nil ? nil : recommendedModelKey, timestamp: timestamp)
+        let reading = MethaneReading(frame: frame, output: out, modelKey: out == nil ? nil : displayedModelKey, timestamp: timestamp)
         appendCapped(reading, into: &liveReadings, cap: 300)
         if isSampling {
             appendCapped(reading, into: &timedSampleReadings, cap: 6000)
@@ -584,8 +665,8 @@ final class BLEManager: NSObject, ObservableObject {
     private func clearMethaneSeries() {
         methaneTimestamps.removeAll()
         methaneRawData.removeAll()
-        methanePPMData.removeAll()
-        methanePPMRawData.removeAll()
+        ppmSeriesByModel = [:]
+        ppmRawSeriesByModel = [:]
         f1Data.removeAll(); f2Data.removeAll(); f3Data.removeAll()
         pressureHPaData.removeAll()
         t1CData.removeAll(); ntc1CData.removeAll(); dieCData.removeAll(); gasCData.removeAll()

@@ -1,0 +1,102 @@
+{
+ "type": "lin_ens",
+ "note": "AIMNet_3.3 (10/27 R2267-R2271): equal average of A = 3.2 recipe, B = A + gated pump-response swap, C = 3.2 + gq200",
+ "lam": 0.01,
+ "A": {
+  "fs": "w2_20_100+T+Th+P+grad",
+  "names": [
+   "w",
+   "ws",
+   "T",
+   "Th33",
+   "Th38",
+   "Th43",
+   "P",
+   "gG",
+   "gD"
+  ],
+  "coef": [
+   0.02847171617521716,
+   0.027523494410703956,
+   -8.693908008459251,
+   -11.290699551929036,
+   1.7210853349774262,
+   -5.764644483022765,
+   -11.533756570194008,
+   -261.9904245961603,
+   132.67732870048513
+  ]
+ },
+ "C": {
+  "fs": "w2_20_100+T+Th+P+grad+gq200",
+  "names": [
+   "w",
+   "ws",
+   "T",
+   "Th33",
+   "Th38",
+   "Th43",
+   "P",
+   "gG",
+   "gD",
+   "gDq",
+   "gGq"
+  ],
+  "coef": [
+   0.02628282433077694,
+   0.02820261824871413,
+   -8.97949884393407,
+   -11.111790182217488,
+   2.326639049047042,
+   -4.378331353443722,
+   -10.310881993325344,
+   -327.1822367431847,
+   183.48540072034226,
+   -1399.9196180837855,
+   1649.3196664606967
+  ],
+  "gq_span": 200
+ },
+ "B": {
+  "SP": 150,
+  "LAG": 30,
+  "G0": 0.2,
+  "CPH": -25.0,
+  "iP": 6,
+  "iG": 7,
+  "iD": 8
+ },
+ "water_spans": {
+  "w": 20,
+  "ws": 100
+ },
+ "weights": [
+  0.3333333333333333,
+  0.3333333333333333,
+  0.3333333333333333
+ ],
+ "train_files": [
+  "12Levelincomplete",
+  "12level complete",
+  "AIMNet fsb001 data 2026-10-15_16-25-29",
+  "AIMNet fsb001 data 2026-10-19_16-15-32",
+  "AIMNet fsb001 data 2026-10-19_18-53-51",
+  "AIMNet fsb001 data 2026-10-19_19-38-26",
+  "AIMNet fsb001 data 2026-10-21_10-20-55",
+  "AIMNet fsb001 data 2026-10-22_11-22-37",
+  "AIMNet fsb001 data 2026-10-26_10-35-49",
+  "AIR_HUMI",
+  "AIR_TEMP",
+  "FourLevelsComplete",
+  "HighFlowRateTest",
+  "LowFlowRateTest",
+  "N2_TEMP_FLOW",
+  "NoMethane1",
+  "NoMethane2PressureAir",
+  "NoMethane2PressureN2",
+  "NoMethane3",
+  "NoMethaneONOFF",
+  "NoMethaneTempLowtoHigh"
+ ],
+ "n_train_segments": 22
+}

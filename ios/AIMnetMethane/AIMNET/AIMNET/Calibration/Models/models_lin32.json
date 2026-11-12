@@ -1,0 +1,54 @@
+{
+ "fs": "w2_20_100+T+Th+P+grad",
+ "lam": 0.01,
+ "names": [
+  "w",
+  "ws",
+  "T",
+  "Th33",
+  "Th38",
+  "Th43",
+  "P",
+  "gG",
+  "gD"
+ ],
+ "coef": [
+  0.02847171617520287,
+  0.02752349441071788,
+  -8.693908008460081,
+  -11.290699551928501,
+  1.7210853349777542,
+  -5.764644483022776,
+  -11.533756570194088,
+  -261.9904245961556,
+  132.67732870047752
+ ],
+ "water_spans": {
+  "w": 20,
+  "ws": 100
+ },
+ "n_train_segments": 22,
+ "train_files": [
+  "12Levelincomplete",
+  "12level complete",
+  "AIMNet fsb001 data 2026-10-15_16-25-29",
+  "AIMNet fsb001 data 2026-10-19_16-15-32",
+  "AIMNet fsb001 data 2026-10-19_18-53-51",
+  "AIMNet fsb001 data 2026-10-19_19-38-26",
+  "AIMNet fsb001 data 2026-10-21_10-20-55",
+  "AIMNet fsb001 data 2026-10-22_11-22-37",
+  "AIMNet fsb001 data 2026-10-26_10-35-49",
+  "AIR_HUMI",
+  "AIR_TEMP",
+  "FourLevelsComplete",
+  "HighFlowRateTest",
+  "LowFlowRateTest",
+  "N2_TEMP_FLOW",
+  "NoMethane1",
+  "NoMethane2PressureAir",
+  "NoMethane2PressureN2",
+  "NoMethane3",
+  "NoMethaneONOFF",
+  "NoMethaneTempLowtoHigh"
+ ]
+}

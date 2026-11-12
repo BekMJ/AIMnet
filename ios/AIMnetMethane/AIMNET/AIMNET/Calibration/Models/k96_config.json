@@ -1,0 +1,1194 @@
+{
+ "note": "K96 methane real-time models shown side by side in the AIMNet UI (10/20). All: one zero per power-on taken automatically after warm-up and never changed; no model uses the CH4 reading as an input; displayed ppm = max(0, x) with < 0.5 shown as 0; raw (unclipped) values are saved too.",
+ "env_file": "rt_final_r33.env",
+ "expected_err_json": "expected_err.json",
+ "default_shown": [
+  "AIMNet_1.7",
+  "AIMNet_3.3"
+ ],
+ "note_default_shown": "R2549 (10/27, user): models drawn by default = AIMNet_1.7 (recommended) and AIMNet_3.3 (best on the two test files, R2546: mean within-5-ppm share 10/20 ONOFF + 10/23 blind 67.7 vs 35.8 for 1.7; chosen after seeing the tests). Drawing only; all models are computed and saved; the recommendation is unchanged. The user's own choice (tags above the chart / 'Choose models...') is stored in ui_settings.json and overrides this.",
+ "models": [
+  {
+   "key": "r33",
+   "label": "r33 (delivered)",
+   "color": "#555555",
+   "json": "models/models_r33.json",
+   "show": true
+  },
+  {
+   "key": "C2",
+   "label": "C2: inlet data in hot-restart model (w 0.15)",
+   "color": "#1f77b4",
+   "json": "models/models_C2.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false
+  },
+  {
+   "key": "third",
+   "label": "third model for bench-level hot restarts (what-if)",
+   "color": "#2ca02c",
+   "json": "models/models_third.json",
+   "n2s": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false
+  },
+  {
+   "key": "inbench",
+   "label": "inlet data in bench model, always bench (what-if)",
+   "color": "#d62728",
+   "json": "models/models_inbench.json",
+   "bench": [
+    "S1006",
+    "S1007",
+    "S1008",
+    "S1009",
+    "S1011",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "force_state": "bench",
+   "show": false
+  },
+  {
+   "key": "C4",
+   "label": "C4: temperature split early/late + C2 hot-restart model",
+   "color": "#9467bd",
+   "json": "models/models_C4.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false
+  },
+  {
+   "key": "C5",
+   "label": "C5: C4 + N2 external-heating session weighted 0.1 in the bench fit",
+   "color": "#d62728",
+   "json": "models/models_C5.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": true
+  },
+  {
+   "key": "C7",
+   "label": "C7: C5 + inlet-tube fast terms (installation flag geo = 1)",
+   "color": "#ff7f0e",
+   "json": "models/models_C7.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0
+  },
+  {
+   "key": "C8",
+   "label": "C8: C7 + inlet-tube fast terms also in the bench model (geo = 1)",
+   "color": "#17becf",
+   "json": "models/models_C8.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0
+  },
+  {
+   "key": "C9",
+   "label": "C9: C8 + slow inlet-tube temperature slope in the bench model (geo = 1)",
+   "color": "#9467bd",
+   "json": "models/models_C9.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0
+  },
+  {
+   "key": "C10",
+   "label": "C10: C9 + fixed inlet-tube correction of the hot-restart temperature slope (geo = 1)",
+   "color": "#e377c2",
+   "json": "models/models_C10.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0
+  },
+  {
+   "key": "C11",
+   "label": "C11: C10 with the inlet data weighted 0.2 in the hot-restart fit (geo = 1)",
+   "color": "#bcbd22",
+   "json": "models/models_C11.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0
+  },
+  {
+   "key": "C12",
+   "label": "C12: C11 + inlet-tube fast water terms, inlet data 0.3 (geo = 1)",
+   "color": "#8c564b",
+   "json": "models/models_C12.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0
+  },
+  {
+   "key": "C14",
+   "label": "C14: C12 + ridge-shrunk inlet terms (geo = 1)",
+   "color": "#e377c2",
+   "json": "models/models_C14.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": true,
+   "geo": 1.0
+  },
+  {
+   "key": "C15",
+   "label": "C15: inlet terms replace the old fast T / P terms, ridge 0.1 (geo = 1)",
+   "color": "#7fb3d5",
+   "json": "models/models_C15.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P"
+   ],
+   "expected_err_json": "expected_err_C15.json"
+  },
+  {
+   "key": "C16",
+   "label": "C16: C15 + inlet die - NTC1 gradient in the bench model (geo = 1)",
+   "color": "#17becf",
+   "json": "models/models_C16.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P"
+   ],
+   "expected_err_json": "expected_err_C15.json"
+  },
+  {
+   "key": "AIMNet_1",
+   "label": "AIMNet_1 (= C4i): C4 + old fast NTC1 / P / H2O terms off at the inlet (geo = 1); user-named 10/21",
+   "color": "#2ca02c",
+   "json": "models/models_AIMNet_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1.json"
+  },
+  {
+   "key": "C4j",
+   "label": "C4j: C4i + inlet fast / slow-pressure terms fitted with the 10/20 N2 on / no-flow cycles (geo = 1); 10/21 candidate",
+   "color": "#e377c2",
+   "json": "models/models_C4j.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O"
+   ]
+  },
+  {
+   "key": "AIMNet_1.1",
+   "label": "AIMNet_1.1: AIMNet_1 + old fast chip-temperature terms also off at the inlet (prediction only, same fit); 10/21",
+   "color": "#ff7f0e",
+   "json": "models/models_AIMNet_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1.json"
+  },
+  {
+   "key": "AIMNet_1.2",
+   "label": "AIMNet_1.2: AIMNet_1.1 + temperature input lagged ~3 min at the inlet (prediction only, same fit); 10/21",
+   "color": "#2ca02c",
+   "json": "models/models_AIMNet_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 150,
+   "expected_err_json": "expected_err_AIMNet_1.json"
+  },
+  {
+   "key": "AIMNet_1.3",
+   "label": "AIMNet_1.3: AIMNet_1.1 + temperature lag ~3 min at the inlet in the hot-restart model only (prediction only, same fit); 10/21",
+   "color": "#1f77b4",
+   "json": "models/models_AIMNet_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 150,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1.json"
+  },
+  {
+   "key": "AIMNet_1.4",
+   "label": "AIMNet_1.4: AIMNet_1.3 + fixed inlet slow-temperature correction in the hot-restart model (+6.5 counts/C, as C10); 10/21 R1415",
+   "color": "#17becf",
+   "json": "models/models_AIMNet_1_4.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 150,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1.json"
+  },
+  {
+   "key": "AIMNet_1.5",
+   "label": "AIMNet_1.5: AIMNet_1.4 with the inlet temperature lag of the hot-restart model 350 (tau ~214 s); 10/21 R1435",
+   "color": "#9467bd",
+   "json": "models/models_AIMNet_1_5.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": true,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json"
+  },
+  {
+   "key": "AIMNet_1.6",
+   "label": "AIMNet_1.6: AIMNet_1.5 + physical inlet water slope in the cold-start (bench) model (0.0697 counts per optical H2O count, from the 10/20 stagnant part), applied from the zero on and only after an N2 zero; 10/22 R1502-R1536 - superseded by AIMNet_1.7 (identical except room air at the inlet)",
+   "color": "#e377c2",
+   "json": "models/models_AIMNet_1_5.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": true,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0697,
+   "wphys_states": [
+    "bench"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true
+  },
+  {
+   "key": "AIMNet_1.7",
+   "label": "AIMNet_1.7 inlet RECOMMENDATION (user 10/22 12:20): AIMNet_1.6 + the inlet physical water slope and the fixed inlet slow-temperature term (+6.5 counts/C) also in the air-shift model (room air at the inlet); 10/22 R1714",
+   "color": "#17becf",
+   "json": "models/models_AIMNet_1_7.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": true,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0697,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "bench"
+   ]
+  },
+  {
+   "key": "AIMNet_1.8",
+   "label": "AIMNet_1.8 CANDIDATE (10/22 R1766, not recommended yet): AIMNet_1.7 + the old fast f3 (firmware water) terms switched off on inlet rows in the ROOM-AIR model only (they double-counted the water step that the physical slope covers: +50 ppm false spike when humid room air arrives; in the cold-start model they help the 10/20 pulses, so kept there)",
+   "color": "#bcbd22",
+   "json": "models/models_AIMNet_1_7.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0697,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "bench"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "airshift"
+   ]
+  },
+  {
+   "key": "AIMNet_1.9",
+   "label": "AIMNet_1.9 CANDIDATE (10/22 R1790-R1825, not recommended yet): AIMNet_1.8 + the 10/20 inlet training rows (rule 43) with weight 0.5 (training-chosen) in the room-air fit, fast room-air coefficients kept at the 1.7 values",
+   "color": "#8c564b",
+   "json": "models/models_AIMNet_1_9.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0697,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "bench"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "airshift"
+   ]
+  },
+  {
+   "key": "AIMNet_2.0",
+   "label": "AIMNet_2.0 CANDIDATE (10/22 R1826-R1828, not recommended yet): AIMNet_1.9 + the hot-restart model refitted with its fast coefficients fixed at the 1.7 values and the inlet N2 sessions at weight 0.5 (training-chosen)",
+   "color": "#e7298a",
+   "json": "models/models_AIMNet_2_0.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0697,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "bench"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "airshift"
+   ]
+  },
+  {
+   "key": "AIMNet_2.1",
+   "label": "AIMNet_2.1 CANDIDATE (10/23 R1883-R1891, INLET installation only, not recommended yet): cold-start model refitted with the 10/20 purge (0.3) and the 10/21 room-air file (1), no N2-zero gate, fast f3 off on inlet rows, inlet early-temperature copy NTC1ie (5400 s), inlet water slope 0.0653",
+   "color": "#2ca02c",
+   "json": "models/models_AIMNet_2_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400
+  },
+  {
+   "key": "AIMNet_2.2",
+   "label": "AIMNet_2.2 CANDIDATE (10/23 R1914-R1917, INLET installation only, not recommended yet): AIMNet_2.1 + slow drying of the physical water term (EMA span 500 when the cell dries, 35 when it gets wetter; water film on the optics)",
+   "color": "#d62728",
+   "json": "models/models_AIMNet_2_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400,
+   "wphys_tau_dry": 500
+  },
+  {
+   "key": "AIMNet_2.3",
+   "label": "AIMNet_2.3 CANDIDATE (10/23 R1936-R1944, INLET installation only, not recommended yet): AIMNet_2.1 + slower drying of the physical water term (span chosen on methane-free 10/20 training rows)",
+   "color": "#9467bd",
+   "json": "models/models_AIMNet_2_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400,
+   "wphys_tau_dry": 1500
+  },
+  {
+   "key": "AIMNet_2.4",
+   "label": "AIMNet_2.4 CANDIDATE (10/23 R1970-R2011, INLET installation only, not recommended yet): AIMNet_2.1 + slow drying (span 1500) of the physical water term only within 120 min after room air was replaced by N2 AFTER the zero (air fraction from the CO2 channel dropped > 0.3); identical to 2.1 on every training and old-tube file; designed after seeing 10/22 (gate) and the old-tube files (after-zero condition, R2011)",
+   "color": "#8c564b",
+   "json": "models/models_AIMNet_2_1.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_1_5.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400,
+   "wphys_tau_dry": 1500,
+   "wphys_dry_afgate": 120,
+   "wphys_dry_afterzero": true
+  },
+  {
+   "key": "AIMNet_3.0",
+   "label": "AIMNet_3.0 CANDIDATE (10/26 R2142, new model family, INLET installation): one pooled linear model w+T+Th+P+grad+af (lin1023 recipe, ridge 0.01) of the baseline change since the zero, trained on 22 segments = every file except the 10/20 ONOFF-4-flows file and the 10/23 blind file (incl. 10/22, 16:15 N2 gaps, 18:53, 10/26 temperature file); zero timing and information columns from the AIMNet_2.1 base stream",
+   "color": "#e377c2",
+   "json": "models/models_lin30.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_3.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400,
+   "type": "lin",
+   "base_json": "models/models_AIMNet_2_1.json"
+  },
+  {
+   "key": "AIMNet_3.1",
+   "label": "AIMNet_3.1 CANDIDATE (10/26 R2145): AIMNet_3.0 without the air-fraction term (composition handled by water only - physics; the af term over-reads +10 ppm while room air diffuses back into a still cell, 10/20 stagnant part); same training set, ridge 0.01",
+   "color": "#7f7f7f",
+   "json": "models/models_lin31.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_3.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400,
+   "type": "lin",
+   "base_json": "models/models_AIMNet_2_1.json"
+  },
+  {
+   "key": "AIMNet_3.2",
+   "label": "AIMNet_3.2 CANDIDATE (10/26 R2193): AIMNet_3.1 with the water term split into a fast (EMA 20) and a slow (EMA 100) part with own coefficients - the only water variant that passes the training criterion; blind 63 -> 70 % within 5, 10/20 unchanged",
+   "color": "#bcbd22",
+   "json": "models/models_lin32.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_3.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400,
+   "type": "lin",
+   "base_json": "models/models_AIMNet_2_1.json"
+  },
+  {
+   "key": "AIMNet_3.3",
+   "label": "AIMNet_3.3 CANDIDATE (10/27 R2267-R2271): equal average of AIMNet_3.2, 3.2 with a gated physics pump response (-25 counts/hPa, lag 30) and 3.2 + squared high-passed temperature gradients; same 22 training segments; LOPO 12.51 -> 11.64, saw-tooth rms 6.4 -> 4.1, tests not worse (members picked after seeing the tests)",
+   "color": "#17becf",
+   "json": "models/models_lin33.json",
+   "n2s": [
+    "X_N2_TEMP_FLOW",
+    "X_AIMNet fsb001 data 2026-10-15_16-25-29",
+    "X_AIMNet fsb001 data 2026-10-15_18-36-50",
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete"
+   ],
+   "prezero_excl": [
+    "X_AIMNet fsb001 data 2026-10-19_18-53-51",
+    "X_AIMNet fsb001 data 2026-10-19_19-38-26",
+    "X_12level complete",
+    "X_AIMNet fsb001 data 2026-10-20_11-50-41"
+   ],
+   "show": false,
+   "geo": 1.0,
+   "geo_replace": [
+    "NTC1",
+    "P",
+    "H2O",
+    "die"
+   ],
+   "tlag": 350,
+   "tlag_states": [
+    "n2shift"
+   ],
+   "expected_err_json": "expected_err_AIMNet_3.json",
+   "wphys": 0.0653,
+   "wphys_states": [
+    "bench",
+    "airshift"
+   ],
+   "wphys_tau": 35,
+   "wphys_zn2": true,
+   "wphys_zn2_states": [
+    "none"
+   ],
+   "geo_replace2": [
+    "f3"
+   ],
+   "geo_replace2_states": [
+    "bench",
+    "airshift"
+   ],
+   "geo_ie_tw": 5400,
+   "type": "lin_ens",
+   "base_json": "models/models_AIMNet_2_1.json"
+  }
+ ],
+ "note_show": "show: false = the model is still computed and saved in the K96 models CSV, only not drawn (third / inbench are what-ifs); set true to draw it",
+ "note_geo": "geo = 1: the sample tube is at the device inlet (set-up since 10/19 14:37); only models trained with the installation flag use it (C7)",
+ "installation_inlet_tube": 1,
+ "recommended": {
+  "0": "C5",
+  "1": "AIMNet_1.7"
+ },
+ "note_recommended": "installation_inlet_tube = 1: the sample tube is at the device inlet (set-up since 10/19 14:37). The panel title shows the recommended model for this installation (0 -> C5, 1 -> C16). r33 stays the delivered default until the user decides. 10/21: inlet recommendation changed C16 -> AIMNet_1 (= C4i) on the user's request (C16 reads 30-80 ppm low on the 10/20 inlet cold start). 10/21 16:15: inlet recommendation AIMNet_1 -> AIMNet_1.2 (same fit; old fast chip-temperature terms off and temperature input lagged ~3 min at the inlet: removes the false bumps at flow changes, 16:15 end 28 -> 3 ppm). 10/21 17:15: -> AIMNet_1.3 (temperature lag in the hot-restart model only; no false bumps on the inlet files). | 10/21 20:20: inlet recommendation AIMNet_1.5 (no inlet false bumps, 16:15 staircase 4.3 ppm; R1435-R1438). | 10/22 00:10: -> AIMNet_1.6 (physical water slope in the cold-start model, R1502-R1536). | 10/22 12:20 (user): -> AIMNet_1.7 (the same water slope and the fixed inlet temperature term also in the room-air model; room-air TEST file +44 -> -4.5 ppm, every other file unchanged; R1709-R1717).",
+ "recommended_air": {
+  "0": "C5",
+  "1": "AIMNet_1.7"
+ },
+ "note_recommended_air": "display only: when the detector reports the air-shift state, the title shows this model instead (C15 is untested in room air at the inlet, R1250). 10/22 12:20 (user): inlet air state -> AIMNet_1.7 (R1714-R1717)."
+}
