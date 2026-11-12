@@ -26,6 +26,8 @@ struct MethaneModelStatus: Equatable {
     var zeroCounter: Double?
     var detail: [String: Double] = [:]
     var powerOn = 0
+    /// Frames received in this power-on.
+    var frames = 0
 }
 
 final class BLEManager: NSObject, ObservableObject {
@@ -79,6 +81,11 @@ final class BLEManager: NSObject, ObservableObject {
     /// Outputs of the active models, keyed by model key.
     @Published var latestModelOutputs: [String: K96Output] = [:]
     @Published var modelStatus = MethaneModelStatus()
+    /// Warm-up progress until the methane model is zeroed (nil once zeroed or without methane data).
+    @Published private(set) var warmup: WarmupProgress?
+    private var warmupEstimator = WarmupEstimator()
+    /// Gas alarms and the warm-up notification (observe it directly; its changes are not forwarded through BLEManager).
+    let alerts = GasAlerts()
     @Published private(set) var modelLoadError: String?
 
     /// Installation: sample tube at the device inlet (AIMNet_1.7) or at the old position (C5).
@@ -303,6 +310,9 @@ final class BLEManager: NSObject, ObservableObject {
         latestModelOutput = nil
         latestModelOutputs = [:]
         modelStatus = MethaneModelStatus()
+        warmup = nil
+        warmupEstimator.reset()
+        alerts.resetAlarms()
 
         detectedDeviceType = .unknown
         latestDeviceTime = nil
@@ -541,19 +551,29 @@ final class BLEManager: NSObject, ObservableObject {
         refreshRecommendedOutput()
     }
 
-    private func refreshModelStatus() {
+    /// - Parameter newFrame: true once per received frame (feeds the warm-up time estimate).
+    private func refreshModelStatus(newFrame: Bool = false) {
         guard let key = currentDeviceKey, let mm = multiModels[key] else {
             modelStatus = MethaneModelStatus()
+            warmup = nil
             return
         }
-        modelStatus = MethaneModelStatus(
+        let status = MethaneModelStatus(
             ready: mm.isReady,
             zeroed: mm.isZeroed,
             holding: mm.isHolding,
             zeroCounter: mm.zeroCount,
             detail: mm.readyDetail,
-            powerOn: mm.powerOnCount
+            powerOn: mm.powerOnCount,
+            frames: mm.framesInPowerOn
         )
+        modelStatus = status
+        let progress = warmupEstimator.update(powerOnID: "\(key)#\(mm.powerOnCount)", status: status, zeroing: mm.isZeroing, feed: newFrame)
+        if progress != warmup { warmup = progress }
+    }
+
+    private var alertDeviceName: String {
+        latestPayloadDeviceName ?? connectedPeripheral?.name ?? "The sensor"
     }
 
     private func processMethaneFrame(_ frame: K96Frame, at timestamp: Date) {
@@ -578,12 +598,22 @@ final class BLEManager: NSObject, ObservableObject {
                     statusMessage = "Methane model restored: \(n) frames of the current power-on replayed from \(used.count) file(s) (same zero)."
                 }
             }
+            let wasZeroed = mm.isZeroed
+            let wasWaitingForZero = mm.isHolding && mm.isReady
             outputs = mm.push(frame)
-            refreshModelStatus()
+            refreshModelStatus(newFrame: true)
+            if !wasZeroed && mm.isZeroed {
+                alerts.notifyWarmupDone(deviceName: alertDeviceName)
+            } else if !wasWaitingForZero && mm.isHolding && mm.isReady {
+                alerts.notifyReadyForManualZero(deviceName: alertDeviceName)
+            }
         }
         latestModelOutputs = outputs
         refreshRecommendedOutput()
         let out = latestModelOutput
+        if let out {
+            alerts.checkMethane(ppm: out.ppm, usable: out.zeroed && out.reliability < 2)
+        }
 
         appendCapped(timestamp, into: &methaneTimestamps)
         appendCapped(frame.CH4, into: &methaneRawData)
@@ -622,6 +652,7 @@ final class BLEManager: NSObject, ObservableObject {
 
         if connectionState != .streaming {
             transition(to: .streaming, message: "Receiving telemetry.")
+            alerts.requestPermissionIfNeeded()
         }
     }
 
@@ -656,9 +687,14 @@ final class BLEManager: NSObject, ObservableObject {
         appendCapped(payload.secondaryPPB, into: &h2sSecondaryData)
         appendCapped(timestamp, into: &h2sTimestamps)
         lastTelemetryUpdateAt = timestamp
+        alerts.checkH2S(ppm: max(
+            H2SDisplayCalibration.sensor1PPM(fromRaw: payload.primaryPPB),
+            H2SDisplayCalibration.sensor2PPM(fromRaw: payload.secondaryPPB)
+        ))
 
         if connectionState != .streaming {
             transition(to: .streaming, message: "Receiving H2S telemetry.")
+            alerts.requestPermissionIfNeeded()
         }
     }
 
@@ -766,6 +802,7 @@ final class BLEManager: NSObject, ObservableObject {
 
     func loadScreenshotDemoData(preferredDeviceType: String?) {
         isScreenshotDemoMode = true
+        alerts.postsNotifications = false
         clearLiveTelemetry()
         bluetoothState = .poweredOn
         connectionState = .streaming
@@ -790,7 +827,8 @@ final class BLEManager: NSObject, ObservableObject {
             latestRawFields = ["AIMNet H2S fsb002", "24095", "39880", "10120"]
         } else {
             // A methane-free nitrogen cold start that settles, is zeroed, and then sees a small methane pulse.
-            let frames = 900
+            // AIMNET_SCREENSHOT_DEMO_FRAMES shows an earlier moment (e.g. 300 = still warming up, 800 = during the pulse)
+            let frames = ProcessInfo.processInfo.environment["AIMNET_SCREENSHOT_DEMO_FRAMES"].flatMap(Int.init) ?? 900
             let baseDate = Date().addingTimeInterval(-Double(frames) * K96Constants.dtS)
             var lastTokens: [String] = []
             for k in 0..<frames {
@@ -927,6 +965,7 @@ extension BLEManager: CBCentralManagerDelegate {
         connectionDurationSec = 0
         cancelTimedSample()
         rawLogger?.close()
+        alerts.resetAlarms()
 
         let uuid = peripheral.identifier
         if let deviceId = activeDeviceIdByPeripheral[uuid] ?? resolveDeviceId(for: peripheral) {

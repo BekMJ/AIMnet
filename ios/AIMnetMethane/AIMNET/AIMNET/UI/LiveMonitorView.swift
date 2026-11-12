@@ -1,4 +1,5 @@
 import Charts
+import CoreBluetooth
 import Foundation
 import SwiftUI
 import UIKit
@@ -9,27 +10,25 @@ private struct ChartPoint: Identifiable {
     let value: Double
 }
 
-nonisolated private enum H2SDisplayCalibration {
-    static let sensor1RawAt25PPM = 40_000.0
-    static let sensor2RawAt25PPM = 10_000.0
-    static let referencePPM = 25.0
-
-    static func sensor1PPM(fromRaw raw: Double) -> Double {
-        max(0, raw * referencePPM / sensor1RawAt25PPM)
-    }
-
-    static func sensor2PPM(fromRaw raw: Double) -> Double {
-        max(0, raw * referencePPM / sensor2RawAt25PPM)
-    }
-}
-
 struct LiveMonitorView: View {
     @ObservedObject var bleManager: BLEManager
     @ObservedObject var sessionStore: SessionStore
-    var initialScrollAnchor: String? = nil
+    @ObservedObject private var alerts: GasAlerts
+    var initialScrollAnchor: String?
 
     @State private var exportMessage: String?
     @State private var pendingShareExport: ShareExport?
+    @AppStorage("live.advancedExpanded") private var advancedExpanded = false
+
+    /// Cards inside the collapsible Advanced section (a screenshot anchor there opens it).
+    private static let advancedAnchors: Set<String> = ["status", "raw", "methaneSetup", "methaneDetails", "methaneMetrics", "methaneMoreCharts"]
+
+    init(bleManager: BLEManager, sessionStore: SessionStore, initialScrollAnchor: String? = nil) {
+        self.bleManager = bleManager
+        self.sessionStore = sessionStore
+        self.alerts = bleManager.alerts
+        self.initialScrollAnchor = initialScrollAnchor
+    }
 
     var body: some View {
         ZStack {
@@ -38,41 +37,41 @@ struct LiveMonitorView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        statusCard
-                            .id("status")
-                        rawPayloadCard
-                            .id("raw")
+                        alarmBanners
+                            .id("alarm")
 
                         switch bleManager.detectedDeviceType {
                         case .methane:
-                            methaneModelCard
+                            methaneHeroCard
                                 .id("methaneModel")
-                            methaneSetupCard
-                                .id("methaneSetup")
-                            methaneMetricsCard
-                                .id("methaneMetrics")
-                            methaneChartsCard
+                            chartPanel(title: "CH4 (ppm)", icon: "chart.line.uptrend.xyaxis",
+                                       values: bleManager.methanePPMData, timestamps: bleManager.methaneTimestamps,
+                                       tint: FuturisticPalette.success, height: 220)
                                 .id("methaneCharts")
                             timedSampleCard
                                 .id("timedSample")
                         case .h2s:
-                            h2sMetricsCard
+                            h2sHeroCard
                                 .id("h2sMetrics")
                             h2sChartsCard
                                 .id("h2sCharts")
                         case .unknown:
+                            statusCard
                             awaitingTelemetryCard
                                 .id("telemetry")
                         }
 
                         sessionCard
                             .id("session")
+
+                        advancedSection
                     }
                     .padding(16)
                 }
                 .scrollIndicators(.hidden)
                 .onAppear {
                     guard let initialScrollAnchor else { return }
+                    if Self.advancedAnchors.contains(initialScrollAnchor) { advancedExpanded = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         proxy.scrollTo(initialScrollAnchor, anchor: .top)
                     }
@@ -80,6 +79,16 @@ struct LiveMonitorView: View {
             }
         }
         .navigationTitle("Live Monitor")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink {
+                    AlertSettingsView(alerts: alerts)
+                } label: {
+                    Image(systemName: alerts.methaneEnabled || alerts.h2sEnabled ? "bell.badge" : "bell.slash")
+                }
+                .accessibilityLabel("Alarms and notifications")
+            }
+        }
         .overlay(alignment: .bottom) {
             if let exportMessage {
                 FuturisticToast(message: exportMessage)
@@ -88,6 +97,314 @@ struct LiveMonitorView: View {
         }
         .sheet(item: $pendingShareExport) { export in
             ActivityView(activityItems: [export.url])
+        }
+    }
+
+    // MARK: - Alarms
+
+    @ViewBuilder
+    private var alarmBanners: some View {
+        if alerts.methane.active {
+            alarmBanner(gas: "METHANE", state: alerts.methane, threshold: alerts.methaneThresholdPPM,
+                        current: bleManager.latestModelOutput?.ppm)
+        }
+        if alerts.h2s.active {
+            alarmBanner(gas: "H2S", state: alerts.h2s, threshold: alerts.h2sThresholdPPM, current: currentH2SPPM)
+        }
+    }
+
+    private func alarmBanner(gas: String, state: GasAlerts.AlarmState, threshold: Double, current: Double?) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(gas) ALARM")
+                    .font(.headline.weight(.heavy))
+                Text("Now \(current.map { String(format: "%.1f", $0) } ?? "--") ppm · alarm level \(GasAlerts.format(threshold)) ppm · peak \(String(format: "%.1f", state.peakPPM)) ppm")
+                    .font(.caption.monospacedDigit())
+                if let since = state.since {
+                    Text("Since \(since.formatted(date: .omitted, time: .standard))")
+                        .font(.caption2)
+                        .opacity(0.85)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.white)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(FuturisticPalette.danger.opacity(0.85)))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var currentH2SPPM: Double? {
+        let values = [
+            bleManager.latestH2SPrimary.map(H2SDisplayCalibration.sensor1PPM),
+            bleManager.latestH2SSecondary.map(H2SDisplayCalibration.sensor2PPM),
+        ].compactMap { $0 }
+        return values.max()
+    }
+
+    // MARK: - Methane
+
+    private var methaneHeroCard: some View {
+        let out = bleManager.latestModelOutput
+        let status = bleManager.modelStatus
+        // provisional readings before the zero are marked unreliable by the model; keep them neutral instead of red
+        let color = out?.zeroed == true ? reliabilityColor(out?.reliability) : FuturisticPalette.cyan
+        return FuturisticPanel("Methane", icon: "flame.fill") {
+            if let error = bleManager.modelLoadError {
+                Text("Methane model not loaded: \(error)")
+                    .font(.caption)
+                    .foregroundStyle(FuturisticPalette.danger)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(out.map { String(format: "%.1f", $0.ppm) } ?? "--")
+                    .font(.system(size: 64, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(alerts.methane.active ? FuturisticPalette.danger : color)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                Text("ppm")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                StatusChip(text: readinessText(out: out, status: status), color: color)
+            }
+
+            if let out, !out.zeroed || out.reliability != 0 {
+                Text(out.zeroed ? out.reliabilityReason : "Provisional: the reading is final once the sensor has warmed up and taken its zero.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.82))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if out == nil {
+                Text("Waiting for the first methane frame.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+
+            if let warmup = bleManager.warmup {
+                Divider().overlay(.white.opacity(0.2))
+                warmupSection(warmup)
+            }
+
+            if bleManager.displayedModelMismatchesTube {
+                Label("The model \(bleManager.displayedModelKey) does not match the sample-tube setting (see Advanced). The reading can be off by tens to hundreds of ppm.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(FuturisticPalette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider().overlay(.white.opacity(0.2))
+            heroFooter(detail: "\(bleManager.displayedModelKey) · tube \(bleManager.tubeAtInlet ? "at inlet" : "old position")",
+                       alarm: alerts.methaneEnabled ? "Alarm at \(GasAlerts.format(alerts.methaneThresholdPPM)) ppm" : "Alarm off")
+        }
+    }
+
+    @ViewBuilder
+    private func warmupSection(_ w: WarmupProgress) -> some View {
+        let title: String = switch w.phase {
+        case .warmingUp: "Warming up"
+        case .zeroing: "Taking the zero"
+        case .waitingForManualZero: "Stable - ready to zero"
+        }
+        let subtitle: String = switch w.phase {
+        case .warmingUp: w.etaText.map { "Readings final in \($0) (rough estimate)" } ?? "Estimating the time left..."
+        case .zeroing: "Averaging 20 s of clean gas. Keep the pump speed and gas unchanged."
+        case .waitingForManualZero: "Make sure the sensor is in gas without methane, at the pump speed you will use, then start the zero."
+        }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("\(Int(w.fraction * 100)) %")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            ProgressView(value: w.fraction)
+                .tint(w.phase == .warmingUp ? FuturisticPalette.cyan : FuturisticPalette.success)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.82))
+                .fixedSize(horizontal: false, vertical: true)
+
+            if w.phase == .warmingUp {
+                checkRow(met: w.timeFraction >= 1, title: "Running at least 5 min",
+                         value: String(format: "%.1f / 5 min", min(w.secondsSincePowerOn, 300) / 60))
+                ForEach(w.checks) { c in
+                    checkRow(met: c.met, title: c.title, value: "\(c.valueText) (needs < \(c.limitText))")
+                }
+            }
+
+            if w.phase == .waitingForManualZero {
+                Button("Start zero now") {
+                    bleManager.startZeroNow()
+                }
+                .buttonStyle(NeonButtonStyle(tint: FuturisticPalette.success))
+            }
+
+            if alerts.warmupNotify && alerts.notificationsAllowed == false {
+                Text("Notifications are off for this app in iOS Settings, so you won't be told when it's ready.")
+                    .font(.caption2)
+                    .foregroundStyle(FuturisticPalette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if alerts.warmupNotify && w.phase == .warmingUp {
+                Text("You'll get a notification when it's ready; you can lock the phone.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+    }
+
+    private func checkRow(met: Bool, title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: met ? "checkmark.circle.fill" : "circle.dotted")
+                .foregroundStyle(met ? FuturisticPalette.success : .white.opacity(0.5))
+                .font(.caption)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.85))
+            Spacer(minLength: 6)
+            Text(value)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.trailing)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func heroFooter(detail: String, alarm: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                StatusChip(text: bleManager.connectionState.rawValue, color: connectionStateColor)
+                Text(durationLabel(bleManager.connectionDurationSec))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.75))
+                Spacer()
+                Text(bleManager.latestPayloadDeviceName ?? bleManager.connectedPeripheral?.name ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(1)
+            }
+            HStack {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+                Spacer()
+                NavigationLink {
+                    AlertSettingsView(alerts: alerts)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bell")
+                        Text(alarm)
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.caption2.weight(.semibold))
+                }
+            }
+            if bleManager.connectionState != .streaming {
+                Text(bleManager.statusMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - H2S
+
+    private var h2sHeroCard: some View {
+        let s1 = bleManager.latestH2SPrimary.map(H2SDisplayCalibration.sensor1PPM)
+        let s2 = bleManager.latestH2SSecondary.map(H2SDisplayCalibration.sensor2PPM)
+        let color = alerts.h2s.active ? FuturisticPalette.danger : FuturisticPalette.warning
+        return FuturisticPanel("H2S (estimated)", icon: "aqi.medium") {
+            HStack(alignment: .top, spacing: 16) {
+                ForEach([("Sensor 1", s1), ("Sensor 2", s2)], id: \.0) { name, value in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(value.map { String(format: "%.1f", $0) } ?? "--")
+                                .font(.system(size: 44, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(color)
+                                .minimumScaleFactor(0.5)
+                                .lineLimit(1)
+                            Text("ppm")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        Text(name)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            Text("Estimated from one reference point per sensor (25 ppm). The alarm uses the higher of the two.")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+            Divider().overlay(.white.opacity(0.2))
+            heroFooter(detail: "Device time \(bleManager.latestDeviceTime.map(String.init) ?? "--")",
+                       alarm: alerts.h2sEnabled ? "Alarm at \(GasAlerts.format(alerts.h2sThresholdPPM)) ppm" : "Alarm off")
+        }
+    }
+
+    // MARK: - Advanced
+
+    private var advancedSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { advancedExpanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape.2")
+                        .foregroundStyle(FuturisticPalette.cyan)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("ADVANCED")
+                            .font(.caption.weight(.semibold))
+                            .tracking(1.2)
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text(bleManager.detectedDeviceType == .methane
+                             ? "Model and tube setup, zero, sensor channels, raw data"
+                             : "Connection details, raw data")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(advancedExpanded ? 180 : 0))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.06)))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(advancedExpanded ? "Hides the advanced cards" : "Shows the advanced cards")
+
+            if advancedExpanded {
+                if bleManager.detectedDeviceType == .methane {
+                    methaneSetupCard
+                        .id("methaneSetup")
+                    methaneDetailsCard
+                        .id("methaneDetails")
+                }
+                if bleManager.detectedDeviceType != .unknown {
+                    statusCard
+                        .id("status")
+                }
+                if bleManager.detectedDeviceType == .methane {
+                    methaneMetricsCard
+                        .id("methaneMetrics")
+                    methaneMoreChartsCard
+                        .id("methaneMoreCharts")
+                }
+                rawPayloadCard
+                    .id("raw")
+            }
         }
     }
 
@@ -170,35 +487,14 @@ struct LiveMonitorView: View {
         }
     }
 
-    private var methaneModelCard: some View {
-        let out = bleManager.latestModelOutput
+    private var methaneDetailsCard: some View {
         let status = bleManager.modelStatus
-        return FuturisticPanel("Methane (K96 model)", icon: "flame.fill") {
-            if let error = bleManager.modelLoadError {
-                Text("Methane model not loaded: \(error)")
-                    .font(.caption)
-                    .foregroundStyle(FuturisticPalette.danger)
-            }
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(out.map { String(format: "%.1f", $0.ppm) } ?? "--")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(reliabilityColor(out?.reliability))
-                    Text("ppm CH4 · \(bleManager.displayedModelLabel)")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.72))
-                }
-                Spacer()
-                StatusChip(text: readinessText(out: out, status: status), color: reliabilityColor(out?.reliability))
-            }
-
-            if let out {
+        return FuturisticPanel("Model Output Details", icon: "function") {
+            if let out = bleManager.latestModelOutput {
                 Text(out.reliabilityReason)
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.82))
                     .fixedSize(horizontal: false, vertical: true)
-
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     FuturisticMetricTile(
                         title: "Not clipped (ppm)",
@@ -311,11 +607,9 @@ struct LiveMonitorView: View {
         }
     }
 
-    private var methaneChartsCard: some View {
+    private var methaneMoreChartsCard: some View {
         let ts = bleManager.methaneTimestamps
         return VStack(spacing: 12) {
-            chartPanel(title: "CH4 (ppm, \(bleManager.displayedModelKey))", icon: "chart.line.uptrend.xyaxis",
-                       values: bleManager.methanePPMData, timestamps: ts, tint: FuturisticPalette.success, height: 220)
             chartPanel(title: "CH4 not clipped (ppm)", icon: "chart.line.uptrend.xyaxis",
                        values: bleManager.methanePPMRawData, timestamps: ts, tint: FuturisticPalette.cyan, height: 170)
             chartPanel(title: "Optical CH4 (counts)", icon: "chart.line.uptrend.xyaxis",
@@ -369,34 +663,6 @@ struct LiveMonitorView: View {
         case "n2shift": return "hot restart"
         case "airshift": return "shifted air"
         default: return state
-        }
-    }
-
-    private var h2sMetricsCard: some View {
-        FuturisticPanel("H2S Estimated PPM", icon: "aqi.medium") {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                FuturisticMetricTile(
-                    title: "Device Time",
-                    value: bleManager.latestDeviceTime.map(String.init) ?? "--",
-                    accent: FuturisticPalette.cyan
-                )
-                FuturisticMetricTile(
-                    title: "H2S Sensor 1 PPM",
-                    value: metricValue(
-                        bleManager.latestH2SPrimary.map(H2SDisplayCalibration.sensor1PPM),
-                        format: "%.2f"
-                    ),
-                    accent: FuturisticPalette.warning
-                )
-                FuturisticMetricTile(
-                    title: "H2S Sensor 2 PPM",
-                    value: metricValue(
-                        bleManager.latestH2SSecondary.map(H2SDisplayCalibration.sensor2PPM),
-                        format: "%.2f"
-                    ),
-                    accent: FuturisticPalette.magenta
-                )
-            }
         }
     }
 

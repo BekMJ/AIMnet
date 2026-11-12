@@ -13,6 +13,13 @@ This folder contains a SwiftUI + CoreBluetooth methane-monitoring app skeleton.
   middle of a power-on is rebuilt from that power-on's frames, so it has the same zero as if it had run from the start.
   One zero per power-on, kept across Bluetooth reconnects, restored from the raw log after an app relaunch.
   Code: `AIMNET/AIMNET/Calibration/`; frozen model files and config: `AIMNET/AIMNET/Calibration/Models/`.
+- Live screen: large reading with its status at the top, warm-up progress until the zero (the zero conditions as a
+  checklist and a rough time-left range), main chart; model setup, sensor channels, other charts and raw data under a
+  collapsible Advanced section.
+- Alarms (bell icon): methane (after the zero, default 50 ppm) and H2S (higher of the two sensors, default 10 ppm), with
+  vibration and a notification; plus a notification when the methane warm-up is done. Code: `AIMNET/AIMNET/Domain/GasAlerts.swift`,
+  `WarmupProgress.swift`.
+  Demo: `AIMNET_SCREENSHOT_DEMO=1 AIMNET_SCREENSHOT_DEMO_FRAMES=500` shows the warm-up, `=800` the 12 ppm pulse.
 - Raw frame logging in the Python UI's format (`Documents/AIMnetMethane/Raw/<device> data <time>.csv`), usable with `k96/run_file.py`.
 - Local session buffering and CSV/JSON export.
 - iPad-oriented split view UI (device list + live monitor).

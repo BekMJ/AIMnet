@@ -1224,6 +1224,8 @@ nonisolated final class K96MultiModel {
     var isZeroed: Bool { anyStream?.zeroValue != nil }
     var isReady: Bool { anyStream?.ready ?? false }
     var isHolding: Bool { anyStream.map { $0.hold && $0.zeroStartIndex == nil } ?? false }
+    /// The 20-s zero window has started but the zero is not set yet.
+    var isZeroing: Bool { anyStream.map { $0.zeroStartIndex != nil && $0.zeroValue == nil } ?? false }
     var readyDetail: [String: Double] { anyStream?.readyDetail ?? [:] }
     var zeroCount: Double? { anyStream?.zeroCounter }
     var framesInPowerOn: Int { frames.count / 15 }
