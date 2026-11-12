@@ -1,0 +1,145 @@
+{
+ "hours_edges": [
+  0,
+  0.5,
+  1,
+  2,
+  3,
+  5,
+  8
+ ],
+ "median_abs_err_ppm": [
+  5.3,
+  7.7,
+  9.9,
+  8.6,
+  11.1,
+  13.2
+ ],
+ "within10_pct": [
+  80,
+  73,
+  67,
+  68,
+  43,
+  50
+ ],
+ "within20_pct": [
+  100,
+  90,
+  83,
+  84,
+  85,
+  75
+ ],
+ "beyond_8h_ppm": 13.2,
+ "flow_transient_add_ppm": 7.0,
+ "source": "R252 (10/18): column = max(hours-keyed table, NTC1-range-since-zero-keyed table) + flow_transient_add_ppm while flow_transient = 1; the range is the causal running max - min of NTC1 since the zero (R243: the slow wander scales with the temperature excursion); |dT| table (R248) kept for reference; information only, never changes the reading; before the zero the column is the constant pre_zero_abs_err_ppm (R262: pooled median |error| of the provisional readings, 29-34 ppm)",
+ "p75_abs_err_ppm_unflagged": [
+  8.6,
+  10.2,
+  8.7,
+  12.7,
+  8.9,
+  16.0
+ ],
+ "p90_abs_err_ppm_unflagged": [
+  10.6,
+  11.1,
+  10.0,
+  13.5,
+  9.7,
+  17.1
+ ],
+ "note": "the column uses median_abs_err_ppm (+flow_transient_add_ppm); p75 / p90 are given for conservative use and are not applied",
+ "key": "max_hours_rng",
+ "dT_edges": [
+  0,
+  0.5,
+  1,
+  2,
+  3,
+  5,
+  10,
+  30
+ ],
+ "median_abs_err_ppm_dT": [
+  5.5,
+  4.2,
+  8.1,
+  6.7,
+  10.1,
+  9.5,
+  13.7
+ ],
+ "beyond_dT_ppm": 13.7,
+ "rng_edges": [
+  0,
+  0.5,
+  1,
+  2,
+  3,
+  5,
+  10,
+  30
+ ],
+ "median_abs_err_ppm_rng": [
+  5.1,
+  4.5,
+  12.3,
+  8.6,
+  7.8,
+  9.5,
+  13.7
+ ],
+ "beyond_rng_ppm": 13.7,
+ "pre_zero_abs_err_ppm": 30.0,
+ "pre_zero_by_state": {
+  "bench": 13.3,
+  "n2shift": 59.0,
+  "airshift": 119.2
+ },
+ "pre_zero_note": "R263 (10/18 08:35): before the zero, once the power-on state is decided (180 s), the column is the median over same-state training power-ons of the per-power-on median |error| of the provisional readings (bench 5 power-ons: 7.8-21.0; n2shift 2: 45.3 / 72.6; airshift 2: 32.9 / 205.5 - weak support for the shifted states); before the state decision it is pre_zero_abs_err_ppm (pooled 30). Information only.",
+ "p75_abs_err_ppm": [
+  8.2,
+  11.7,
+  11.8,
+  11.5,
+  18.1,
+  38.9
+ ],
+ "p75_beyond_8h_ppm": 38.9,
+ "p75_abs_err_ppm_rng": [
+  7.1,
+  5.6,
+  15.4,
+  9.4,
+  8.9,
+  14.9,
+  17.3
+ ],
+ "p75_beyond_rng_ppm": 17.3,
+ "p90_abs_err_ppm": [
+  10.9,
+  13.5,
+  13.4,
+  15.0,
+  20.8,
+  43.2
+ ],
+ "p90_beyond_8h_ppm": 43.2,
+ "p90_abs_err_ppm_rng": [
+  8.1,
+  7.2,
+  16.9,
+  10.0,
+  9.7,
+  17.3,
+  20.8
+ ],
+ "p90_beyond_rng_ppm": 20.8,
+ "build": "build_expected_err.py (R269, 10/18): mean over power-ons of per-power-on quantiles; hours table all after-zero rows, range table unflagged rows with >= 100 rows; AIR_HUMI excluded; EXP_ERR_Q selects median (default) / p75 / p90",
+ "zero_offset_thr_ppm": 30.0,
+ "zero_offset_add_ppm": 5.0,
+ "zero_offset_note": "R536/R537 (10/18 17:56): +zero_offset_add_ppm on after-zero rows of power-ons whose |zero_offset_ppm| (R515) exceeds zero_offset_thr_ppm; in-sample coverage of the three flagged training power-ons 60 -> 74 % within 1x, 89 -> 100 % within 2x, others unchanged; n = 3, rule and add judged on the same power-ons."
+}

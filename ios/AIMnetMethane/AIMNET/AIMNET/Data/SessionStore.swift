@@ -12,24 +12,18 @@ enum SessionExportFormat: String, CaseIterable {
 
 @MainActor
 final class SessionStore: ObservableObject {
+    /// The session being recorded. Its `readings` stay empty while recording (they are kept in `activeReadings`
+    /// so that appending one reading per second does not copy the whole array); `endSession()` merges them.
     @Published private(set) var activeSession: MethaneMonitoringSession?
+    @Published private(set) var activeReadingCount = 0
     @Published private(set) var recentSessions: [MethaneMonitoringSession] = []
+    private var activeReadings: [MethaneReading] = []
 
     private let maxStoredSessions: Int
     private let indexURL: URL
 
-    private let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return encoder
-    }()
-
-    private let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }()
+    private let encoder = MethaneExport.jsonEncoder()
+    private let decoder = MethaneExport.jsonDecoder()
 
     init(maxStoredSessions: Int = 25) {
         self.maxStoredSessions = maxStoredSessions
@@ -46,6 +40,8 @@ final class SessionStore: ObservableObject {
             deviceId: deviceId,
             deviceName: deviceName
         )
+        activeReadings = []
+        activeReadingCount = 0
     }
 
     func updateActiveSessionDevice(deviceId: String, deviceName: String) {
@@ -56,9 +52,9 @@ final class SessionStore: ObservableObject {
     }
 
     func append(reading: MethaneReading) {
-        guard var session = activeSession else { return }
-        session.readings.append(reading)
-        activeSession = session
+        guard activeSession != nil else { return }
+        activeReadings.append(reading)
+        activeReadingCount = activeReadings.count
     }
 
     @discardableResult
@@ -67,6 +63,9 @@ final class SessionStore: ObservableObject {
         if session.endedAt == nil {
             session.endedAt = Date()
         }
+        session.readings = activeReadings
+        activeReadings = []
+        activeReadingCount = 0
         activeSession = nil
         recentSessions.insert(session, at: 0)
         trimStoredSessions()
@@ -83,13 +82,21 @@ final class SessionStore: ObservableObject {
         let baseDate = Date().addingTimeInterval(-12 * 60)
         let readings = (0..<120).map { index in
             let phase = Double(index) / 9.0
-            return MethaneReading(
+            let ppm = max(0, 3.0 + sin(phase) * 2.5 + Double(index % 11) * 0.2)
+            var reading = MethaneReading(
                 timestamp: baseDate.addingTimeInterval(Double(index) * 6),
-                rawValue: 1820 + sin(phase) * 85 + Double(index % 11) * 5,
-                ppm: 1820 + sin(phase) * 85 + Double(index % 11) * 5,
+                rawValue: 40367 - 2 * ppm,
+                ppm: ppm,
                 temperatureC: 24.4 + sin(phase / 2) * 0.6,
                 humidityRH: 42.0 + cos(phase / 3) * 2.4
             )
+            reading.modelKey = K96ModelSpec.aimnet17.key
+            reading.ppmRaw = ppm
+            reading.zeroed = true
+            reading.modelState = "bench"
+            reading.reliability = 0
+            reading.reliabilityReason = "ok"
+            return reading
         }
         recentSessions = [
             MethaneMonitoringSession(
@@ -155,20 +162,7 @@ final class SessionStore: ObservableObject {
     }
 
     private func makeCSV(session: MethaneMonitoringSession) -> String {
-        let formatter = ISO8601DateFormatter()
-        var lines: [String] = []
-        lines.append("timestamp,rawValue,ppm,temperatureRaw,humidityRaw")
-
-        for reading in session.readings {
-            let timestamp = formatter.string(from: reading.timestamp)
-            let temperature = reading.temperatureC.map { String($0) } ?? ""
-            let humidity = reading.humidityRH.map { String($0) } ?? ""
-            lines.append(
-                "\(timestamp),\(reading.rawValue),\(reading.ppm),\(temperature),\(humidity)"
-            )
-        }
-
-        return lines.joined(separator: "\n")
+        MethaneExport.csv(readings: session.readings)
     }
 
     private func trimStoredSessions() {
