@@ -1,0 +1,70 @@
+{
+ "hours_edges": [
+  0,
+  0.5,
+  1,
+  2,
+  3,
+  5,
+  8
+ ],
+ "median_abs_err_ppm": [
+  13.0,
+  20.1,
+  18.4,
+  22.5,
+  36.7,
+  53.8
+ ],
+ "beyond_8h_ppm": 53.8,
+ "flow_transient_add_ppm": 7.0,
+ "source": "R2195 (10/26): leave-one-segment-out errors of the lin recipe w+T+Th+P+grad on 21 training segments (AIR_HUMI excluded); per power-on median |error| per bin, mean over power-ons; column = max(hours table, NTC1-range table) + flow_transient_add_ppm; pre-zero and zero_offset fields copied from expected_err_AIMNet_1_5.json (the base stream supplies them). Information only.",
+ "note": "the column uses median_abs_err_ppm (+flow_transient_add_ppm); p75 / p90 are given for conservative use and are not applied",
+ "key": "max_hours_rng",
+ "dT_edges": [
+  0,
+  0.5,
+  1,
+  2,
+  3,
+  5,
+  10,
+  30
+ ],
+ "beyond_dT_ppm": 13.7,
+ "rng_edges": [
+  0,
+  0.5,
+  1,
+  2,
+  3,
+  5,
+  10,
+  30
+ ],
+ "median_abs_err_ppm_rng": [
+  8.4,
+  16.9,
+  18.7,
+  28.5,
+  29.6,
+  47.8,
+  36.3
+ ],
+ "beyond_rng_ppm": 47.8,
+ "pre_zero_abs_err_ppm": 30.0,
+ "pre_zero_by_state": {
+  "bench": 13.3,
+  "n2shift": 59.0,
+  "airshift": 119.2
+ },
+ "pre_zero_note": "R263 (10/18 08:35): before the zero, once the power-on state is decided (180 s), the column is the median over same-state training power-ons of the per-power-on median |error| of the provisional readings (bench 5 power-ons: 7.8-21.0; n2shift 2: 45.3 / 72.6; airshift 2: 32.9 / 205.5 - weak support for the shifted states); before the state decision it is pre_zero_abs_err_ppm (pooled 30). Information only.",
+ "p75_beyond_8h_ppm": 44.1,
+ "p75_beyond_rng_ppm": 11.0,
+ "p90_beyond_8h_ppm": 47.8,
+ "p90_beyond_rng_ppm": 21.8,
+ "build": "build_expected_err.py (R269, 10/18): mean over power-ons of per-power-on quantiles; hours table all after-zero rows, range table unflagged rows with >= 100 rows; AIR_HUMI excluded; EXP_ERR_Q selects median (default) / p75 / p90",
+ "zero_offset_thr_ppm": 30.0,
+ "zero_offset_add_ppm": 5.0,
+ "zero_offset_note": "R536/R537 (10/18 17:56): +zero_offset_add_ppm on after-zero rows of power-ons whose |zero_offset_ppm| (R515) exceeds zero_offset_thr_ppm; in-sample coverage of the three flagged training power-ons 60 -> 74 % within 1x, 89 -> 100 % within 2x, others unchanged; n = 3, rule and add judged on the same power-ons."
+}

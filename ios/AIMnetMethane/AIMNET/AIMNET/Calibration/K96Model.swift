@@ -2,12 +2,10 @@ import Foundation
 
 // Swift port of the K96 methane real-time baseline pipeline (`k96/k96_rt.py`, AIMNet_realtime package of 2026-10-27).
 //
-// Only the code paths used by the two models shipped in the app are ported:
-//   - AIMNet_1.7 (sample tube at the device inlet; the package's inlet recommendation)
-//   - C5         (sample tube at the old position)
-// Loading a model file that needs a feature or option this port does not implement throws, so a new model
-// cannot silently compute something different from Python. Equivalence with Python is checked by
-// `Tools/K96Golden` (same frames in, same outputs out).
+// Every model listed in `k96_config.json` (a copy of the package's `k96/config.json`) can run: the state-model family
+// (r33, C2-C16, AIMNet_1 ... AIMNet_2.4) and the pooled linear family (AIMNet_3.0-3.2 `lin`, AIMNet_3.3 `lin_ens`).
+// Loading a model that needs a feature or option this port does not implement throws, so a new model cannot silently
+// compute something different from Python. Equivalence with Python is checked by `Tools/K96Golden`.
 //
 // Every output uses only the current and earlier frames of the current power-on. One zero per power-on, taken
 // once after warm-up and never changed. The CH4 reading is never a model input.
@@ -78,6 +76,7 @@ nonisolated struct K96S2: Decodable {
     let nosat: Bool
 }
 
+/// State-model file (`models_*.json` with bench / n2shift / airshift models).
 nonisolated struct K96ModelFile: Decodable {
     struct DefaultConstant: Decodable { let bench_T0_C: [String: Double] }
     let version: String
@@ -86,6 +85,19 @@ nonisolated struct K96ModelFile: Decodable {
     let warmup_model: K96LinearModel?
     let default_constant: DefaultConstant
     let s2: K96S2?
+}
+
+/// Pooled linear baseline file (`models_lin3x.json`): either one model (`names` / `coef`) or the 3.3 ensemble (A / B / C).
+nonisolated struct K96LinFile: Decodable {
+    struct Part: Decodable { let names: [String]; let coef: [Double]; let gq_span: Int? }
+    struct PumpB: Decodable { let SP: Int; let LAG: Int; let G0: Double; let CPH: Double; let iP: Int; let iG: Int; let iD: Int }
+    let names: [String]?
+    let coef: [Double]?
+    let water_spans: [String: Int]?
+    let A: Part?
+    let B: PumpB?
+    let C: Part?
+    let weights: [Double]?
 }
 
 nonisolated struct K96ExpectedError: Decodable {
@@ -103,56 +115,92 @@ nonisolated struct K96ExpectedError: Decodable {
     let zero_offset_thr_ppm: Double?
 }
 
-/// One entry of `k96/config.json`, limited to the options this port implements.
-nonisolated struct K96ModelSpec {
+/// One entry of `k96_config.json` (the package's `k96/config.json`).
+nonisolated struct K96ModelSpec: Decodable, Identifiable {
     var key: String
     var label: String
-    var modelFile: String
-    var expectedErrFile: String
-    var n2s: [String] = K96Constants.genuineN2s
-    var bench: [String] = K96Constants.benchDefault
-    var prezeroExcl: [String] = []
-    var geo = 0.0
-    var geoReplace: [String] = []
-    var tlag = 0
-    var tlagStates: [String] = []
-    var wphys = 0.0
-    var wphysStates: [String] = []
-    var wphysTau = 35
-    var wphysZN2 = false
-    var wphysZN2States: [String]? = nil
+    var json: String
+    var type: String?
+    var baseJson: String?
+    var expectedErrJson: String?
+    var show: Bool
+    var n2s: [String]
+    var bench: [String]
+    var prezeroExcl: [String]
+    var forceState: String?
+    var geo: Double
+    var geoReplace: [String]
+    var tlag: Int
+    var tlagStates: [String]
+    var wphys: Double
+    var wphysStates: [String]
+    var wphysTau: Int
+    var wphysZN2: Bool
+    var wphysZN2States: [String]?
+    var geoReplace2: [String]
+    var geoReplace2States: [String]
+    var geoIeTw: Int
+    var wphysTauDry: Int
+    var wphysDryLevel: Double
+    var wphysDryAfgate: Double
+    var wphysDryAfterZero: Bool
 
-    /// The package's inlet recommendation (config.json entry 'AIMNet_1.7').
-    static let aimnet17 = K96ModelSpec(
-        key: "AIMNet_1.7",
-        label: "AIMNet 1.7 (tube at inlet)",
-        modelFile: "models_AIMNet_1_7",
-        expectedErrFile: "expected_err_AIMNet_1_5",
-        n2s: ["X_N2_TEMP_FLOW", "X_AIMNet fsb001 data 2026-10-15_16-25-29", "X_AIMNet fsb001 data 2026-10-15_18-36-50",
-              "X_AIMNet fsb001 data 2026-10-19_18-53-51", "X_AIMNet fsb001 data 2026-10-19_19-38-26", "X_12level complete"],
-        prezeroExcl: ["X_AIMNet fsb001 data 2026-10-19_18-53-51", "X_AIMNet fsb001 data 2026-10-19_19-38-26", "X_12level complete",
-                      "X_AIMNet fsb001 data 2026-10-20_11-50-41"],
-        geo: 1.0,
-        geoReplace: ["NTC1", "P", "H2O", "die"],
-        tlag: 350,
-        tlagStates: ["n2shift"],
-        wphys: 0.0697,
-        wphysStates: ["bench", "airshift"],
-        wphysTau: 35,
-        wphysZN2: true,
-        wphysZN2States: ["bench"]
-    )
+    var id: String { key }
+    /// Trained for the sample tube at the device inlet (installation flag geo = 1).
+    var isInletModel: Bool { geo > 0 }
 
-    /// The package's old-tube recommendation (config.json entry 'C5').
-    static let c5 = K96ModelSpec(
-        key: "C5",
-        label: "C5 (tube at old position)",
-        modelFile: "models_C5",
-        expectedErrFile: "expected_err",
-        n2s: ["X_N2_TEMP_FLOW", "X_AIMNet fsb001 data 2026-10-15_16-25-29", "X_AIMNet fsb001 data 2026-10-15_18-36-50",
-              "X_AIMNet fsb001 data 2026-10-19_18-53-51", "X_AIMNet fsb001 data 2026-10-19_19-38-26", "X_12level complete"],
-        prezeroExcl: ["X_AIMNet fsb001 data 2026-10-19_18-53-51", "X_AIMNet fsb001 data 2026-10-19_19-38-26", "X_12level complete"]
-    )
+    enum CodingKeys: String, CodingKey {
+        case key, label, json, type, show, n2s, bench, geo, tlag, wphys
+        case baseJson = "base_json", expectedErrJson = "expected_err_json", prezeroExcl = "prezero_excl", forceState = "force_state"
+        case geoReplace = "geo_replace", tlagStates = "tlag_states", wphysStates = "wphys_states", wphysTau = "wphys_tau"
+        case wphysZN2 = "wphys_zn2", wphysZN2States = "wphys_zn2_states", geoReplace2 = "geo_replace2"
+        case geoReplace2States = "geo_replace2_states", geoIeTw = "geo_ie_tw", wphysTauDry = "wphys_tau_dry"
+        case wphysDryLevel = "wphys_dry_level", wphysDryAfgate = "wphys_dry_afgate", wphysDryAfterZero = "wphys_dry_afterzero"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? key
+        json = try c.decode(String.self, forKey: .json)
+        type = try c.decodeIfPresent(String.self, forKey: .type)
+        baseJson = try c.decodeIfPresent(String.self, forKey: .baseJson)
+        expectedErrJson = try c.decodeIfPresent(String.self, forKey: .expectedErrJson)
+        show = try c.decodeIfPresent(Bool.self, forKey: .show) ?? true
+        let n2 = try c.decodeIfPresent([String].self, forKey: .n2s) ?? []
+        n2s = n2.isEmpty ? K96Constants.genuineN2s : n2
+        let b = try c.decodeIfPresent([String].self, forKey: .bench) ?? []
+        bench = b.isEmpty ? K96Constants.benchDefault : b
+        prezeroExcl = try c.decodeIfPresent([String].self, forKey: .prezeroExcl) ?? []
+        forceState = try c.decodeIfPresent(String.self, forKey: .forceState)
+        geo = try c.decodeIfPresent(Double.self, forKey: .geo) ?? 0
+        geoReplace = try c.decodeIfPresent([String].self, forKey: .geoReplace) ?? []
+        tlag = try c.decodeIfPresent(Int.self, forKey: .tlag) ?? 0
+        tlagStates = try c.decodeIfPresent([String].self, forKey: .tlagStates) ?? []
+        wphys = try c.decodeIfPresent(Double.self, forKey: .wphys) ?? 0
+        wphysStates = try c.decodeIfPresent([String].self, forKey: .wphysStates) ?? []
+        let tau = try c.decodeIfPresent(Int.self, forKey: .wphysTau) ?? 35
+        wphysTau = tau == 0 ? 35 : tau
+        wphysZN2 = try c.decodeIfPresent(Bool.self, forKey: .wphysZN2) ?? false
+        wphysZN2States = try c.decodeIfPresent([String].self, forKey: .wphysZN2States)
+        geoReplace2 = try c.decodeIfPresent([String].self, forKey: .geoReplace2) ?? []
+        geoReplace2States = try c.decodeIfPresent([String].self, forKey: .geoReplace2States) ?? []
+        geoIeTw = try c.decodeIfPresent(Int.self, forKey: .geoIeTw) ?? 0
+        wphysTauDry = try c.decodeIfPresent(Int.self, forKey: .wphysTauDry) ?? 0
+        wphysDryLevel = try c.decodeIfPresent(Double.self, forKey: .wphysDryLevel) ?? 1e9
+        wphysDryAfgate = try c.decodeIfPresent(Double.self, forKey: .wphysDryAfgate) ?? 0
+        wphysDryAfterZero = try c.decodeIfPresent(Bool.self, forKey: .wphysDryAfterZero) ?? false
+    }
+}
+
+nonisolated struct K96Config: Decodable {
+    let env_file: String
+    let expected_err_json: String
+    let models: [K96ModelSpec]
+    let recommended: [String: String]
+    let installation_inlet_tube: Int?
+    let default_shown: [String]?
+    let env_override: [String: String]?
 }
 
 nonisolated enum K96ModelError: Error, CustomStringConvertible {
@@ -162,57 +210,124 @@ nonisolated enum K96ModelError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .missingResource(let name): return "K96 model resource missing: \(name).json"
-        case .unsupportedFeature(let model, let feature): return "K96 model \(model) needs feature '\(feature)', which the iOS port does not implement"
+        case .missingResource(let name): return "K96 model resource missing: \(name)"
+        case .unsupportedFeature(let model, let feature): return "K96 model \(model) needs '\(feature)', which the iOS port does not implement"
         case .badModel(let why): return "K96 model invalid: \(why)"
         }
     }
 }
 
-/// Model file + expected-error table, loaded once and shared by every power-on.
+/// Model file(s) + expected-error table of one config entry, loaded once and shared by every power-on.
 nonisolated final class K96LoadedModel {
     let spec: K96ModelSpec
+    /// State-model file (for `lin` / `lin_ens` entries: the base model that gives the zero and the information columns).
     let file: K96ModelFile
+    let lin: K96LinFile?
     let expectedError: K96ExpectedError?
 
-    init(spec: K96ModelSpec, file: K96ModelFile, expectedError: K96ExpectedError?) throws {
+    init(spec: K96ModelSpec, file: K96ModelFile, lin: K96LinFile?, expectedError: K96ExpectedError?) throws {
         self.spec = spec
         self.file = file
+        self.lin = lin
         self.expectedError = expectedError
         try validate()
     }
 
-    convenience init(spec: K96ModelSpec, bundle: Bundle = .main) throws {
-        try self.init(spec: spec, directory: nil, bundle: bundle)
-    }
-
-    /// Loads `<modelFile>.json` and `<expectedErrFile>.json` from `directory` if given, else from the bundle.
-    convenience init(spec: K96ModelSpec, directory: URL?, bundle: Bundle = .main) throws {
-        func url(_ name: String) throws -> URL {
-            if let directory { return directory.appendingPathComponent(name + ".json") }
-            guard let u = bundle.url(forResource: name, withExtension: "json") else { throw K96ModelError.missingResource(name) }
-            return u
-        }
-        let decoder = JSONDecoder()
-        decoder.nonConformingFloatDecodingStrategy = .convertFromString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
-        let file = try decoder.decode(K96ModelFile.self, from: Data(contentsOf: try url(spec.modelFile)))
-        let exp = try? decoder.decode(K96ExpectedError.self, from: Data(contentsOf: try url(spec.expectedErrFile)))
-        try self.init(spec: spec, file: file, expectedError: exp)
-    }
+    var isLinear: Bool { spec.type == "lin" || spec.type == "lin_ens" }
 
     private func validate() throws {
-        guard file.gain_counts_per_ppm == K96Constants.gain else { throw K96ModelError.badModel("gain \(file.gain_counts_per_ppm) != 2") }
+        guard file.gain_counts_per_ppm == K96Constants.gain else { throw K96ModelError.badModel("\(spec.key): gain \(file.gain_counts_per_ppm) != 2") }
         for st in ["bench", "n2shift", "airshift"] where file.models[st] == nil {
-            throw K96ModelError.badModel("state model '\(st)' missing")
+            throw K96ModelError.badModel("\(spec.key): state model '\(st)' missing")
         }
         let all = Array(file.models.values) + (file.warmup_model.map { [$0] } ?? [])
         for m in all {
-            guard m.X.count == m.coef.count else { throw K96ModelError.badModel("X / coef length mismatch") }
+            guard m.X.count == m.coef.count else { throw K96ModelError.badModel("\(spec.key): X / coef length mismatch") }
             for c in m.X where !K96Stream.isSupported(feature: c) {
                 throw K96ModelError.unsupportedFeature(model: spec.key, feature: c)
             }
         }
-        if spec.tlag != 0 && spec.tlagStates.isEmpty { throw K96ModelError.badModel("tlag without tlag_states is not ported") }
+        if let f = spec.forceState, f != "bench" { throw K96ModelError.unsupportedFeature(model: spec.key, feature: "force_state \(f)") }
+        switch spec.type {
+        case nil:
+            break
+        case "lin":
+            guard let lin, let names = lin.names, let coef = lin.coef, names.count == coef.count else {
+                throw K96ModelError.badModel("\(spec.key): lin file needs names / coef")
+            }
+            for n in names where !K96LinStream.linFeatures.contains(n) { throw K96ModelError.unsupportedFeature(model: spec.key, feature: n) }
+        case "lin_ens":
+            guard let lin, let a = lin.A, let c = lin.C, lin.B != nil, a.names.count == a.coef.count, c.names.count == c.coef.count else {
+                throw K96ModelError.badModel("\(spec.key): lin_ens file needs A / B / C")
+            }
+            for n in a.names where !K96LinStream.linFeatures.contains(n) { throw K96ModelError.unsupportedFeature(model: spec.key, feature: n) }
+            for n in c.names where !(a.names.contains(n) || n == "gDq" || n == "gGq") { throw K96ModelError.unsupportedFeature(model: spec.key, feature: n) }
+        default:
+            throw K96ModelError.unsupportedFeature(model: spec.key, feature: "type \(spec.type!)")
+        }
+    }
+}
+
+/// Every model of `k96_config.json`, loaded from a folder or the app bundle.
+nonisolated final class K96Catalog {
+    let config: K96Config
+    /// Loaded models in config order. Models that failed to load are left out and listed in `loadErrors`.
+    let models: [K96LoadedModel]
+    let loadErrors: [String]
+
+    var keys: [String] { models.map(\.spec.key) }
+    func model(_ key: String) -> K96LoadedModel? { models.first { $0.spec.key == key } }
+
+    /// Recommended model for the installation (config 'recommended': "1" = tube at the inlet, "0" = old position).
+    func recommendedKey(tubeAtInlet: Bool) -> String? {
+        let k = config.recommended[tubeAtInlet ? "1" : "0"]
+        return k.flatMap { model($0) != nil ? $0 : nil }
+    }
+
+    convenience init(bundle: Bundle = .main) throws {
+        try self.init { name in
+            let base = (name as NSString).deletingPathExtension
+            guard let u = bundle.url(forResource: base, withExtension: "json") else { throw K96ModelError.missingResource(name) }
+            return u
+        }
+    }
+
+    convenience init(directory: URL) throws {
+        try self.init { directory.appendingPathComponent($0) }
+    }
+
+    /// `locate` maps a file name (as written in config.json, folder part dropped) to its URL.
+    init(locate: (String) throws -> URL) throws {
+        let decoder = JSONDecoder()
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
+        func load<T: Decodable>(_ type: T.Type, _ path: String) throws -> T {
+            try decoder.decode(T.self, from: Data(contentsOf: try locate((path as NSString).lastPathComponent)))
+        }
+        let config = try load(K96Config.self, "k96_config.json")
+        guard config.env_file == "rt_final_r33.env", (config.env_override ?? [:]).isEmpty else {
+            throw K96ModelError.badModel("only the rt_final_r33.env run-time settings are ported (config uses \(config.env_file))")
+        }
+        self.config = config
+        var stateFiles: [String: K96ModelFile] = [:]
+        var expFiles: [String: K96ExpectedError] = [:]
+        var loaded: [K96LoadedModel] = []
+        var errors: [String] = []
+        for spec in config.models {
+            do {
+                let statePath = spec.type == nil ? spec.json : (spec.baseJson ?? "")
+                let file = try stateFiles[statePath] ?? load(K96ModelFile.self, statePath)
+                stateFiles[statePath] = file
+                let lin: K96LinFile? = try spec.type.map { _ in try load(K96LinFile.self, spec.json) }
+                let expPath = spec.expectedErrJson ?? config.expected_err_json
+                let exp = try expFiles[expPath] ?? load(K96ExpectedError.self, expPath)
+                expFiles[expPath] = exp
+                loaded.append(try K96LoadedModel(spec: spec, file: file, lin: lin, expectedError: exp))
+            } catch {
+                errors.append("\(spec.key): \(error)")
+            }
+        }
+        models = loaded
+        loadErrors = errors
     }
 }
 
@@ -248,6 +363,45 @@ nonisolated struct K96EMA {
     mutating func callAsFunction(_ x: Double) -> Double {
         if let y0 = y { y = y0 + a * (x - y0) } else { y = x }
         return y!
+    }
+}
+
+/// Asymmetric EMA (k96_rt.AEMA): slow span while the input rises (cell drying), normal span otherwise.
+nonisolated struct K96AEMA {
+    let aw: Double, ad: Double, lv: Double
+    var y: Double?
+    init(spanWet: Int, spanDry: Int, level: Double) {
+        aw = 2.0 / (Double(spanWet) + 1.0); ad = 2.0 / (Double(spanDry) + 1.0); lv = level
+    }
+    mutating func callAsFunction(_ x: Double, gate: Bool = true) -> Double {
+        if let y0 = y { y = y0 + ((x > y0 && y0 < lv && gate) ? ad : aw) * (x - y0) } else { y = x }
+        return y!
+    }
+}
+
+/// k96_rt.AFGate: true within W minutes after the real-time air fraction dropped by more than 0.3.
+nonisolated struct K96AFGate {
+    let n: Int
+    var buf: [Double] = []
+    var lvl = 450.0
+    var dq: [(Int, Double)] = []
+    var head = 0
+    var i = 0
+    init(minutes: Double) { n = max(Int(minutes * 60 / 1.222), 1) }
+    mutating func callAsFunction(_ f2: Double, active: Bool) -> Bool {
+        if f2 > 300 {
+            buf.append(f2)
+            if buf.count > 100 { buf.removeFirst(buf.count - 100) }
+            if buf.count >= 50 { lvl = K96Math.median(buf) }
+        }
+        let af = min(max(f2 / lvl, 0.0), 1.0)
+        if !active { return false }
+        while dq.count > head && dq[dq.count - 1].1 <= af { dq.removeLast() }
+        dq.append((i, af))
+        while dq[head].0 <= i - n { head += 1 }
+        if head > 4096 { dq.removeFirst(head); head = 0 }
+        i += 1
+        return (dq[head].1 - af) > 0.3
     }
 }
 
@@ -368,9 +522,28 @@ nonisolated enum K96Detector {
     }
 }
 
-// MARK: - One model, one power-on (k96_rt.Stream)
+// MARK: - Stream protocol
 
-nonisolated final class K96Stream {
+/// One model for one power-on (k96_rt.Stream / LinStream / LinEnsStream).
+nonisolated protocol K96ModelStream: AnyObject {
+    func push(_ r: K96Frame) -> K96Output
+    var hold: Bool { get set }
+    var zeroStartIndex: Int? { get }
+    var zeroCounter: Double? { get }
+    var zeroValue: Double? { get }
+    var ready: Bool { get }
+    var readyDetail: [String: Double] { get }
+    // used by the cross-model reliability notes (K96MultiModel)
+    var geo: Double { get }
+    var wphysZN2: Bool { get }
+    var f2AtZeroStart: Double? { get }
+    var switchCnt: Double? { get }
+    var switchNow: Double { get }
+}
+
+// MARK: - State models (k96_rt.Stream)
+
+nonisolated final class K96Stream: K96ModelStream {
     private let spec: K96ModelSpec
     private let M: [String: K96LinearModel]
     private let W: K96LinearModel?
@@ -380,6 +553,7 @@ nonisolated final class K96Stream {
     private let env: K96RuntimeSettings
     private let pzx: Set<String>
     private let cols: [String]
+    private let colSet: Set<String>
     private let incTW: [Int]
     private let hingeCols: [(String, Double)]
     private let thingeCols: [(String, Double)]
@@ -395,7 +569,8 @@ nonisolated final class K96Stream {
     private var ieL: [Int: Double] = [:]
     private var ilL: [Int: Double] = [:]
     private var FLag: [String: Double] = [:]
-    private var emaWP: K96EMA
+    private var emaWP: K96AEMA
+    private var wpGate: K96AFGate?
     private var wpH: Double = .nan
     private var f2I0: Double?
     private var wpDZ: [String: Double]?
@@ -404,7 +579,7 @@ nonisolated final class K96Stream {
     private var incL: [Int: Double] = [:]
     private var prevT: Double?
     private var TFirst: Double?
-    private var emaH2O: K96EMA, emaF3: K96EMA, emaAH: K96EMA
+    private var emaH2O: K96EMA, emaF3: K96EMA, emaAH: K96EMA, emaDDie: K96EMA
     private var emaCO2 = K96EMA(span: 1800)
     private static let fch = ["H2O", "f3", "P", "NTC1", "die"]
     private var emaHP: [String: K96EMA]
@@ -458,25 +633,29 @@ nonisolated final class K96Stream {
     private var gapLastCn: Double?
     private var dtq = K96Ring<Double>(capacity: 60)
     private var gapUntil = -1.0
-    // R1758 / R1927 (used by K96MultiModel)
-    private(set) var f2z: Double?
-    private(set) var swCn: Double?
-    private(set) var swNow = 0.0
+    // R1927
+    private var f2z: Double?
+    private(set) var switchCnt: Double?
+    private(set) var switchNow = 0.0
     private var f2Prev = 0.0
 
     var geo: Double { spec.geo }
     var wphysZN2: Bool { spec.wphysZN2 }
     var f2AtZeroStart: Double? { f2I0 }
+    var zeroStartIndex: Int? { i0 }
+    var zeroCounter: Double? { cntI0 }
+    var zeroValue: Double? { c1 }
 
     static func isSupported(feature c: String) -> Bool {
-        if ["NTC1", "P", "H2Ol", "f3l", "AHl", "co2rhp1800", "geo_NTC1slow", "geo2_NTC1slow"].contains(c) { return true }
+        if ["NTC1", "P", "H2Ol", "f3l", "AHl", "co2rhp1800", "geo_NTC1slow", "geo2_NTC1slow",
+            "geo_dDie", "geo_dDie_l", "geo_NTC1ie", "geo_Pslow"].contains(c) { return true }
         for p in ["NTC1ie", "NTC1il"] where c.hasPrefix(p) { return Int(c.dropFirst(6)) != nil }
         if c.hasPrefix("hinge") { return Double(c.dropFirst(5)) != nil }
         if c.hasPrefix("Thinge") { return Double(c.dropFirst(6)) != nil }
         if c.hasPrefix("Texp") { return Double(c.dropFirst(4)) != nil }
         if c.hasPrefix("fast_") {
             let p = c.split(separator: "_")
-            return p.count == 4 && fch.contains(String(p[1])) && p[2] == "hp" && p[3].hasPrefix("l")
+            return p.count == 4 && fch.contains(String(p[1])) && p[2] == "hp" && p[3].hasPrefix("l") && Int(p[3].dropFirst()) != nil
         }
         if c.hasPrefix("geo_fast_") { return false }
         if c.hasPrefix("geo_") { return isSupported(feature: "fast_" + c.dropFirst(4)) }
@@ -494,22 +673,28 @@ nonisolated final class K96Stream {
         pzx = Set(spec.prezeroExcl)
         let all = Array(M.values) + (W.map { [$0] } ?? [])
         cols = Array(Set(all.flatMap(\.X))).sorted()
+        colSet = Set(cols)
         var tws = Set<Int>()
         for c in cols where c.hasPrefix("NTC1ie") || c.hasPrefix("NTC1il") { tws.insert(Int(c.dropFirst(6))!) }
+        if spec.geoIeTw != 0 && colSet.contains("geo_NTC1ie") { tws.insert(spec.geoIeTw) }
         incTW = tws.sorted()
         for tw in incTW { incE[tw] = 0; incL[tw] = 0 }
         hingeCols = cols.filter { $0.hasPrefix("hinge") }.map { ($0, Double($0.dropFirst(5))!) }
         thingeCols = cols.filter { $0.hasPrefix("Thinge") }.map { ($0, Double($0.dropFirst(6))!) }
         texpCols = cols.filter { $0.hasPrefix("Texp") }.map { ($0, Double($0.dropFirst(4))!) }
-        geoFastCols = cols.filter { $0.hasPrefix("geo_") && $0 != "geo_NTC1slow" }.map { ($0, "fast_" + $0.dropFirst(4)) }
+        geoFastCols = cols.filter { $0.hasPrefix("geo_") }.map { ($0, "fast_" + $0.dropFirst(4)) }
         geoSlowCols = cols.filter { $0 == "geo_NTC1slow" || $0 == "geo2_NTC1slow" }
         var wg: [String: [(String, Double)]] = [:]
         for (st, m) in M {
             wg[st] = zip(m.X, m.coef).filter { $0.0 == "H2Ol" || $0.0 == "f3l" || $0.0 == "AHl" || $0.0.hasPrefix("hinge") }.map { ($0.0, $0.1) }
         }
         waterGroup = wg
-        emaWP = K96EMA(span: spec.wphysTau)
-        emaH2O = K96EMA(span: env.tau); emaF3 = K96EMA(span: env.tau); emaAH = K96EMA(span: env.tau)
+        // plain EMA = AEMA with equal spans
+        emaWP = spec.wphysTauDry != 0
+            ? K96AEMA(spanWet: spec.wphysTau, spanDry: spec.wphysTauDry, level: spec.wphysDryLevel)
+            : K96AEMA(spanWet: spec.wphysTau, spanDry: spec.wphysTau, level: 1e9)
+        wpGate = (spec.wphysTauDry != 0 && spec.wphysDryAfgate != 0) ? K96AFGate(minutes: spec.wphysDryAfgate) : nil
+        emaH2O = K96EMA(span: env.tau); emaF3 = K96EMA(span: env.tau); emaAH = K96EMA(span: env.tau); emaDDie = K96EMA(span: env.tau)
         emaHP = Dictionary(uniqueKeysWithValues: Self.fch.map { ($0, K96EMA(span: env.tsFast)) })
         hp = Dictionary(uniqueKeysWithValues: Self.fch.map { ($0, []) })
         hpKeep = (env.fastLags.max() ?? 0) + 1
@@ -525,7 +710,12 @@ nonisolated final class K96Stream {
     // MARK: features (k96_rt.Stream.feats)
 
     private func feats(_ r: K96Frame) -> [String: Double] {
-        let T = r.T1b / 100.0
+        var T = r.T1b / 100.0
+        if spec.tlag != 0 && spec.geo > 0 && spec.tlagStates.isEmpty {
+            // AIMNet_1.2: every temperature term sees the lagged temperature on inlet rows
+            if emaTL == nil { emaTL = K96EMA(span: spec.tlag) }
+            T = emaTL!(T)
+        }
         if spec.tlag != 0 && spec.geo > 0 && !spec.tlagStates.isEmpty {
             if emaTL == nil {
                 emaTL = K96EMA(span: spec.tlag); TfL = nil; pTL = nil
@@ -549,9 +739,16 @@ nonisolated final class K96Stream {
             FLag = FL
         }
         var F: [String: Double] = ["NTC1": T, "P": r.P / 10.0]
-        F.reserveCapacity(cols.count + 8)
+        F.reserveCapacity(cols.count + 16)
         if TFirst == nil { TFirst = T }
-        if spec.wphys != 0 { wpH = emaWP(r.H2O) }
+        if spec.wphys != 0 {
+            if wpGate != nil {
+                let g = wpGate!(r.f2, active: spec.wphysDryAfterZero ? (i0 != nil) : true)
+                wpH = emaWP(r.H2O, gate: g)
+            } else {
+                wpH = emaWP(r.H2O)
+            }
+        }
         let hl = emaH2O(r.H2O)
         F["H2Ol"] = hl
         F["f3l"] = emaF3(r.f3)
@@ -585,6 +782,14 @@ nonisolated final class K96Stream {
         }
         for (c, fastName) in geoFastCols { if let v = F[fastName] { F[c] = v * spec.geo } }
         for c in geoSlowCols { F[c] = (T - 30.0) * spec.geo }
+        if colSet.contains("geo_dDie") || colSet.contains("geo_dDie_l") {
+            let dd = r.T2 / 100.0 - T
+            let ddl = emaDDie(dd)
+            F["geo_dDie"] = dd * spec.geo
+            F["geo_dDie_l"] = ddl * spec.geo
+        }
+        if colSet.contains("geo_NTC1ie") { F["geo_NTC1ie"] = (incE[spec.geoIeTw] ?? 0) * spec.geo }
+        if colSet.contains("geo_Pslow") { F["geo_Pslow"] = (r.P / 10.0 - 980.0) * spec.geo }
         if !spec.geoReplace.isEmpty {
             for (k, v) in F where k.hasPrefix("fast_") {
                 let ch = k.split(separator: "_")[1]
@@ -642,8 +847,10 @@ nonisolated final class K96Stream {
         if decD60 == nil && cn >= t0c + env.detectS1 { decD60 = K96Detector.detect(firstRows, uptoS: env.detectS1) }
         if decD180 == nil && cn >= t0c + 180 { decD180 = K96Detector.detect(firstRows, uptoS: 180) }
         let hasN2 = M["n2shift"] != nil
-        let d1e = (decE?.reason.hasPrefix("D1") ?? false) && hasN2
-        let stFirst = (hasN2 && ((decD60?.reason.hasPrefix("D1") ?? false) || d1e)) ? "n2shift" : "bench"
+        let forceBench = spec.forceState == "bench"
+        var d1e = (decE?.reason.hasPrefix("D1") ?? false) && hasN2
+        var stFirst = (hasN2 && ((decD60?.reason.hasPrefix("D1") ?? false) || d1e)) ? "n2shift" : "bench"
+        if forceBench { d1e = false; stFirst = "bench" }
         let t1 = t0c + (d1e ? env.d1EarlyS! : env.detectS1)
         var state: String?
         var t2: Double
@@ -657,8 +864,14 @@ nonisolated final class K96Stream {
             state = nil
             t2 = t0c + 180.0
         }
+        if forceBench && state != nil { state = "bench" }
         let st: String = cn < t1 ? "bench" : (cn < t2 ? stFirst : (state ?? "bench"))
-        let Fm: [String: Double] = (!FLag.isEmpty && spec.tlagStates.contains(st)) ? F.merging(FLag) { _, b in b } : F
+        var Fm: [String: Double] = (!FLag.isEmpty && spec.tlagStates.contains(st)) ? F.merging(FLag) { _, b in b } : F
+        if !spec.geoReplace2.isEmpty && spec.geo > 0 && spec.geoReplace2States.contains(st) {
+            for (k, val) in Fm where k.hasPrefix("fast_") && spec.geoReplace2.contains(String(k.split(separator: "_")[1])) {
+                Fm[k] = val * (1.0 - spec.geo)
+            }
+        }
         var base = M[st]!.dot(Fm)
         if spec.wphys != 0 && spec.geo > 0 && spec.wphysZN2 {
             if let i0, i > i0, let f2I0, (f2I0 < 300 || (spec.wphysZN2States != nil && !spec.wphysZN2States!.contains(st))) {
@@ -836,10 +1049,10 @@ nonisolated final class K96Stream {
 
         if conf && spec.geo > 0 {
             let f2v = r.f2
-            if f2z == nil { f2z = f2v; swCn = nil; f2Prev = f2v }
-            if f2z! >= 300 && f2v < 60 && f2Prev >= 60 { swCn = cn }
+            if f2z == nil { f2z = f2v; switchCnt = nil; f2Prev = f2v }
+            if f2z! >= 300 && f2v < 60 && f2Prev >= 60 { switchCnt = cn }
             f2Prev = f2v
-            swNow = cn
+            switchNow = cn
         }
         return K96Output(
             cnt: cn, ppm: Self.display(raw), ppmRaw: raw, zeroed: conf, state: st,
@@ -857,63 +1070,238 @@ nonisolated final class K96Stream {
     }
 }
 
+// MARK: - Pooled linear models (k96_rt.LinStream / LinEnsStream, AIMNet_3.x)
+
+/// One pooled linear model of the methane-free baseline change since the zero. The zero timing, the provisional reading
+/// before the zero and every information column come from the base state-model stream (AIMNet_2.1 for 3.0-3.3).
+nonisolated final class K96LinStream: K96ModelStream {
+    static let linFeatures: Set<String> = ["w", "ws", "T", "Th33", "Th38", "Th43", "P", "gG", "gD", "af", "Ts", "Tf", "Tq", "Tqs", "Tsl"]
+
+    private let base: K96Stream
+    private let names: [String]
+    private let coef: [Double]
+    private var emaH: K96EMA, emaHS: K96EMA
+    private var emaTS = K96EMA(span: 2945)
+    private var emaTQ = K96EMA(span: 400)
+    private var f2buf: [Double] = []
+    private var lvl = 450.0
+    private var ref: [Double]?
+    private var B0: Double?
+    private var zc: Double?
+    private var zq = K96Ring<(Double, Double)>(capacity: 48)
+    // AIMNet_3.3 ensemble (A = names / coef above, B = fixed pump response, C = A + squared gradient terms)
+    private struct Ens {
+        let namesC: [String]
+        let coefC: [Double]
+        let B: K96LinFile.PumpB
+        let w: [Double]
+        var eGqD: K96EMA, eGqG: K96EMA
+        var eP: K96EMA, eGG: K96EMA, eGD: K96EMA, eLag: K96EMA
+        var refC: [Double]?
+        var cref: Double?
+    }
+    private var ens: Ens?
+
+    init(model: K96LoadedModel, env: K96RuntimeSettings = .r33) {
+        base = K96Stream(model: model, env: env)
+        let lin = model.lin!
+        let spans = lin.water_spans ?? [:]
+        emaH = K96EMA(span: spans["w"] ?? 35)
+        emaHS = K96EMA(span: spans["ws"] ?? 100)
+        if let a = lin.A, let c = lin.C, let b = lin.B {
+            names = a.names; coef = a.coef
+            let sp = c.gq_span ?? 200
+            ens = Ens(namesC: c.names, coefC: c.coef, B: b, w: lin.weights ?? [1.0 / 3, 1.0 / 3, 1.0 / 3],
+                      eGqD: K96EMA(span: sp), eGqG: K96EMA(span: sp),
+                      eP: K96EMA(span: b.SP), eGG: K96EMA(span: b.SP), eGD: K96EMA(span: b.SP), eLag: K96EMA(span: b.LAG))
+        } else {
+            names = lin.names!; coef = lin.coef!
+        }
+    }
+
+    var hold: Bool { get { base.hold } set { base.hold = newValue } }
+    var zeroStartIndex: Int? { base.zeroStartIndex }
+    var zeroCounter: Double? { base.zeroCounter }
+    var zeroValue: Double? { base.zeroValue }
+    var ready: Bool { base.ready }
+    var readyDetail: [String: Double] { base.readyDetail }
+    var geo: Double { base.geo }
+    var wphysZN2: Bool { base.wphysZN2 }
+    var f2AtZeroStart: Double? { base.f2AtZeroStart }
+    var switchCnt: Double? { base.switchCnt }
+    var switchNow: Double { base.switchNow }
+
+    private func feats(_ r: K96Frame, af: Double) -> [String: Double] {
+        let T = r.T1b / 100.0
+        let He = emaH(r.H2O), Hs = emaHS(r.H2O), Ts = emaTS(T), Tq = emaTQ(T)
+        return ["w": He, "ws": Hs, "T": T, "Th33": max(T - 33.0, 0.0), "Th38": max(T - 38.0, 0.0), "Th43": max(T - 43.0, 0.0),
+                "P": r.P / 10.0, "gG": r.T3 / 100.0 - T, "gD": r.T2 / 100.0 - T, "af": af, "Ts": Ts, "Tf": T - Ts,
+                "Tq": (T - 36.0) * (T - 36.0), "Tqs": (Tq - 36.0) * (Tq - 36.0), "Tsl": Tq]
+    }
+
+    func push(_ r: K96Frame) -> K96Output {
+        var o = base.push(r)
+        let cn = r.cnt, v = r.f2
+        if v > 300 {
+            f2buf.append(v)
+            if f2buf.count > 100 { f2buf.removeFirst(f2buf.count - 100) }
+            if f2buf.count >= 50 { lvl = K96Math.median(f2buf) }
+        }
+        let af = min(max(v / lvl, 0.0), 1.0)
+        let F = feats(r, af: af)
+        let x = names.map { F[$0]! }
+        let raw = r.CH4
+        zq.append((cn, raw + 4.0 * af))
+        if var e = ens {
+            let T = r.T1b / 100.0, gD = r.T2 / 100.0 - T, gG = r.T3 / 100.0 - T, P = r.P / 10.0
+            let hD = gD - e.eGqD(gD), hG = gG - e.eGqG(gG)
+            var FC = Dictionary(uniqueKeysWithValues: zip(names, x))
+            FC["gDq"] = copysign(hD * hD, hD)
+            FC["gGq"] = copysign(hG * hG, hG)
+            let xc = e.namesC.map { FC[$0]! }
+            let Ph = P - e.eP(P), gGh = gG - e.eGG(gG), gDh = gD - e.eGD(gD)
+            let gate = min(abs(gDh) / e.B.G0, 1.0)
+            let lag = e.eLag(Ph)
+            let c = gate * (e.B.CPH * lag - (coef[e.B.iP] * Ph + coef[e.B.iG] * gGh + coef[e.B.iD] * gDh))
+            if o.zeroed {
+                if ref == nil {
+                    ref = x; e.refC = xc; e.cref = c; zc = cn
+                    let zw = zq.elements.filter { zc! - 20.0 <= $0.0 && $0.0 < zc! }.map(\.1)
+                    B0 = zw.isEmpty ? raw + 4.0 * af : K96Math.median(zw)
+                }
+                var yA = 0.0
+                for (k, (xi, ri)) in zip(coef, zip(x, ref!)) { yA += k * (xi - ri) }
+                var yC = 0.0
+                for (k, (xi, ri)) in zip(e.coefC, zip(xc, e.refC!)) { yC += k * (xi - ri) }
+                let yh = e.w[0] * yA + e.w[1] * (yA + c - e.cref!) + e.w[2] * yC
+                let rd = (B0! + yh - raw) / 2.0
+                o.ppmRaw = rd; o.ppm = K96Stream.display(rd)
+            }
+            ens = e
+        } else if o.zeroed {
+            if ref == nil {
+                ref = x; zc = cn
+                let zw = zq.elements.filter { zc! - 20.0 <= $0.0 && $0.0 < zc! }.map(\.1)
+                B0 = zw.isEmpty ? raw + 4.0 * af : K96Math.median(zw)
+            }
+            var yh = 0.0
+            for (k, (xi, ri)) in zip(coef, zip(x, ref!)) { yh += k * (xi - ri) }
+            let rd = (B0! + yh - raw) / 2.0
+            o.ppmRaw = rd; o.ppm = K96Stream.display(rd)
+        }
+        return o
+    }
+}
+
+nonisolated func makeK96Stream(_ model: K96LoadedModel) -> K96ModelStream {
+    model.isLinear ? K96LinStream(model: model) : K96Stream(model: model)
+}
+
 // MARK: - Several models for one device (k96_rt.MultiModel)
 
-/// Runs every model on each frame. A new power-on (device counter going back) restarts every model with a new zero.
-/// A Bluetooth reconnect without a power cycle continues the same models (same zero).
+/// Runs the active models on each frame. A new power-on (device counter going back) restarts every model with a new zero;
+/// a Bluetooth reconnect without a power cycle continues the same models (same zero).
+///
+/// The frames of the current power-on are kept (120 bytes each), so a model can be switched on at any time: it is built by
+/// replaying those frames and then has exactly the state and zero it would have had from the start.
 nonisolated final class K96MultiModel {
-    let models: [K96LoadedModel]
-    private(set) var streams: [K96Stream] = []
+    let catalog: K96Catalog
+    private(set) var activeKeys: [String] = []
+    private var streams: [String: K96ModelStream] = [:]
+    private var frames: [Double] = []
+    /// (frame index, hold) changes of the manual-zero hold in this power-on, replayed with the frames.
+    private var holdEvents: [(Int, Bool)] = []
     private var lastCnt: Double?
     private(set) var powerOnCount = 0
-    var manualZero = false
+    private(set) var manualZero = false
 
-    init(models: [K96LoadedModel]) { self.models = models }
+    init(catalog: K96Catalog, active: [String]) {
+        self.catalog = catalog
+        activeKeys = catalog.keys.filter { active.contains($0) }
+    }
 
-    var isZeroed: Bool { streams.first?.c1 != nil }
-    var isReady: Bool { streams.first?.ready ?? false }
-    var isHolding: Bool { streams.first.map { $0.hold && $0.i0 == nil } ?? false }
+    private var anyStream: K96ModelStream? { activeKeys.first.flatMap { streams[$0] } }
+    var isZeroed: Bool { anyStream?.zeroValue != nil }
+    var isReady: Bool { anyStream?.ready ?? false }
+    var isHolding: Bool { anyStream.map { $0.hold && $0.zeroStartIndex == nil } ?? false }
+    var readyDetail: [String: Double] { anyStream?.readyDetail ?? [:] }
+    var zeroCount: Double? { anyStream?.zeroCounter }
+    var framesInPowerOn: Int { frames.count / 15 }
 
     /// Manual mode holds the zero until `zeroNow()`; applies to streams that have not started their zero yet.
     func setZeroMode(manual: Bool) {
         manualZero = manual
-        for s in streams where s.i0 == nil { s.hold = manual }
+        guard !streams.isEmpty, !streams.values.contains(where: { $0.zeroStartIndex != nil }) else { return }
+        for s in streams.values { s.hold = manual }
+        holdEvents.append((framesInPowerOn, manual))
     }
-    var readyDetail: [String: Double] { streams.first?.readyDetail ?? [:] }
-    var zeroCount: Double? { streams.first?.cntI0 }
 
     /// Manual zero mode: release the hold so the next stable frame starts the one-time 20-s zero window.
     @discardableResult
     func zeroNow() -> Bool {
-        guard !streams.isEmpty, !streams.contains(where: { $0.i0 != nil }) else { return false }
-        for s in streams { s.hold = false }
+        guard !streams.isEmpty, !streams.values.contains(where: { $0.zeroStartIndex != nil }) else { return false }
+        for s in streams.values { s.hold = false }
+        holdEvents.append((framesInPowerOn, false))
         return true
     }
 
-    /// Returns one output per model, in the order of `models`.
-    func push(_ r: K96Frame) -> [K96Output] {
+    /// Switch models on (replaying this power-on's frames) or off. Returns, for each newly built model, its outputs for the
+    /// last `keepLast` frames of the replay (oldest first; the cross-model reliability notes are not added to these).
+    @discardableResult
+    func setActive(_ keys: [String], keepLast: Int = 1) -> [String: [K96Output]] {
+        let wanted = catalog.keys.filter { keys.contains($0) }
+        var last: [String: [K96Output]] = [:]
+        for k in wanted where streams[k] == nil && !frames.isEmpty {
+            guard let model = catalog.model(k) else { continue }
+            let s = makeK96Stream(model)
+            var ev = 0
+            let n = framesInPowerOn
+            var kept: [K96Output] = []
+            kept.reserveCapacity(min(keepLast, n))
+            for j in 0..<n {
+                while ev < holdEvents.count && holdEvents[ev].0 == j { s.hold = holdEvents[ev].1; ev += 1 }
+                let o = s.push(K96Frame(values: Array(frames[(j * 15)..<(j * 15 + 15)])))
+                if j >= n - keepLast { kept.append(o) }
+            }
+            last[k] = kept
+            while ev < holdEvents.count { s.hold = holdEvents[ev].1; ev += 1 }
+            streams[k] = s
+        }
+        for k in streams.keys where !wanted.contains(k) { streams[k] = nil }
+        activeKeys = wanted
+        return last
+    }
+
+    /// Outputs of the active models, keyed by model key.
+    func push(_ r: K96Frame) -> [String: K96Output] {
         if streams.isEmpty || (lastCnt != nil && r.cnt < lastCnt!) {
-            streams = models.map { K96Stream(model: $0) }
-            if manualZero { for s in streams { s.hold = true } }
+            streams = [:]
+            for k in activeKeys { if let m = catalog.model(k) { streams[k] = makeK96Stream(m) } }
+            for s in streams.values { s.hold = manualZero }
+            frames = []
+            holdEvents = [(0, manualZero)]
             powerOnCount += 1
         }
         lastCnt = r.cnt
-        var out = streams.map { $0.push(r) }
+        let ordered = activeKeys.compactMap { k in streams[k].map { (k, $0) } }
+        var out: [String: K96Output] = [:]
+        for (k, s) in ordered { out[k] = s.push(r) }
+        frames.append(contentsOf: r.values)
         // R1758: inlet + room-air zero classified as a cold start -> no water correction (text only)
-        for (k, s) in streams.enumerated() {
-            if s.geo > 0 && s.wphysZN2, let f = s.f2AtZeroStart, f >= 300, out[k].zeroed, out[k].state == "bench" {
-                for j in out.indices where !out[j].reliabilityReason.contains("humidity changes") {
-                    out[j].reliabilityReason += "; inlet zero taken in room air in the cold-start state: humidity changes may read as methane (no water correction)"
+        for (k, s) in ordered {
+            if s.geo > 0 && s.wphysZN2, let f = s.f2AtZeroStart, f >= 300, let o = out[k], o.zeroed, o.state == "bench" {
+                for j in out.keys where !out[j]!.reliabilityReason.contains("humidity changes") {
+                    out[j]!.reliabilityReason += "; inlet zero taken in room air in the cold-start state: humidity changes may read as methane (no water correction)"
                 }
                 break
             }
         }
         // R1927: inlet + room-air zero, then the gas switched to N2 in the last 90 min (level / text only)
-        for s in streams {
-            if s.geo > 0, let sw = s.swCn, s.swNow - sw < 5400 {
-                for j in out.indices where out[j].reliability < 2 && !out[j].reliabilityReason.contains("gas switched") {
-                    out[j].reliability = max(out[j].reliability, 1)
-                    out[j].reliabilityReason = (out[j].reliabilityReason != "ok" ? out[j].reliabilityReason + "; " : "")
+        for (_, s) in ordered {
+            if s.geo > 0, let sw = s.switchCnt, s.switchNow - sw < 5400 {
+                for j in out.keys where out[j]!.reliability < 2 && !out[j]!.reliabilityReason.contains("gas switched") {
+                    out[j]!.reliability = max(out[j]!.reliability, 1)
+                    out[j]!.reliabilityReason = (out[j]!.reliabilityReason != "ok" ? out[j]!.reliabilityReason + "; " : "")
                         + "gas switched from room air (zero) to N2 in the last 90 min: inlet models can read +30..+80 ppm too high (AIMNet_1.7 / 2.1) or down to -30 ppm too low for ~30 min (2.3 / 2.4)"
                 }
                 break

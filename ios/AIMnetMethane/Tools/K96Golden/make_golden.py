@@ -1,17 +1,16 @@
 """Build golden fixtures for the Swift K96 port.
 
 Writes synthetic raw logger files (same format as the AIMNet Python UI: no header, `pc_time, <device tokens>`) and the
-outputs of the reference Python pipeline (k96_rt.MultiModel with the models the app ships) for each of them.
+outputs of the reference Python pipeline (k96_rt.MultiModel with EVERY model of k96/config.json) for each of them.
 
-    python3 make_golden.py --k96 /path/to/AIMNet_realtime/k96 --out fixtures
+    python3 make_golden.py --k96 /path/to/AIMNet_realtime/k96 --out /tmp/k96golden
 
 The scenarios are synthetic: they exercise the code paths (cold start in N2, hot restart, room-air zero then a
 switch to N2, shifted air state, flow steps, data gaps, a stuck gas-temperature sensor, slow sampling, a power
 cycle), not the physics. Replace or extend them with real recordings when available.
 """
-import argparse, csv, datetime, math, os, sys
+import argparse, csv, datetime, json, math, os, sys
 
-APP_MODELS = ['AIMNet_1.7', 'C5']
 OUT_COLS = ['cnt', 'CH4_ppm', 'CH4_ppm_raw', 'zeroed', 'state', 'zero_offset_ppm', 'flow_transient', 'bme_suspect', 'zero_suspect',
             'expected_abs_err_ppm', 'optics_invalid', 'temp_rate_C_per_5min', 'reliability', 'reliability_reason']
 
@@ -29,7 +28,7 @@ def frame(cnt, f1, f2, f3, P, T1, T1b, T2, RH, T3, H2O, CH4, CO2, flag=0):
     return [int(round(v)) for v in (cnt, f1, f2, f3, P, T1, T1b, 0, T2, RH, T3, flag, H2O, CH4, CO2)]
 
 
-def scenario(name, seed, segments):
+def scenario(name, seed, segments, manual_zero_at=None):
     """segments: list of (n_frames, dt_s, cnt_start or None, fn(k, t, rng) -> dict of channel values)"""
     rng = Rng(seed); rows = []; t_abs = 0.0
     for n, dt, cnt0, fn in segments:
@@ -40,7 +39,7 @@ def scenario(name, seed, segments):
             v = fn(k, t, rng)
             rows.append((t_abs, frame(base_cnt + math.floor(t), **v)))
             t += dt; t_abs += dt
-    return name, rows
+    return name, rows, manual_zero_at
 
 
 def warm(t, t0=22.0, t1=26.0, tau=900.0):
@@ -95,6 +94,9 @@ SCENARIOS = [
     scenario('slow_sampling_n2', 44, [
         (1500, 3.0, 5, lambda k, t, g: cold_n2(k, t, g, f1=-700.0)),
     ]),
+    scenario('manual_zero_cold_n2', 55, [
+        (2600, 1.222, 4, lambda k, t, g: cold_n2(k, t, g, ch4_pulse=(2600, 2800, 15))),
+    ], manual_zero_at=1400),
 ]
 
 
@@ -102,10 +104,13 @@ def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--k96', required=True); ap.add_argument('--out', required=True); a = ap.parse_args()
     sys.path.insert(0, a.k96); import k96_rt
     cfg, specs = k96_rt.load_config(a.k96)
-    specs = [next(sp for sp in specs if sp['key'] == k) for k in APP_MODELS]
+    keys = [sp['key'] for sp in specs]
+    if cfg['warnings']: print('python warnings:', cfg['warnings'])
     os.makedirs(a.out, exist_ok=True)
     start = datetime.datetime(2026, 11, 1, 9, 0, 0)
-    for name, rows in SCENARIOS:
+    for name, rows, manual_zero_at in SCENARIOS:
+        with open(os.path.join(a.out, f'{name}.meta.json'), 'w') as fh:
+            json.dump({'manual_zero_at': manual_zero_at, 'models': keys}, fh)
         raw_path = os.path.join(a.out, f'{name}.raw.csv')
         with open(raw_path, 'w', newline='') as fh:
             w = csv.writer(fh)
@@ -113,11 +118,13 @@ def main():
                 ts = (start + datetime.timedelta(seconds=t_abs)).strftime('%Y-%m-%d %H:%M:%S')
                 w.writerow([ts, fr[0], 'start'] + fr[1:11] + ['end'] + fr[11:])
         mm = k96_rt.MultiModel(specs)
+        if manual_zero_at is not None: mm.set_zero_mode('manual')
         with open(os.path.join(a.out, f'{name}.expected.csv'), 'w', newline='') as fh:
             w = csv.writer(fh); w.writerow(['model'] + OUT_COLS)
-            for fr in k96_rt.raw_frames(raw_path):
+            for j, fr in enumerate(k96_rt.raw_frames(raw_path)):
+                if j == manual_zero_at: mm.zero_now()
                 out = mm.push(fr)
-                for k in APP_MODELS:
+                for k in keys:
                     o = out[k]; w.writerow([k] + [repr(float(o[c])) if isinstance(o[c], float) else o[c] for c in OUT_COLS])
         print(f'{name}: {len(rows)} frames')
 

@@ -1,0 +1,48 @@
+{
+ "fs": "w+T+Th+P+grad",
+ "lam": 0.01,
+ "names": [
+  "w",
+  "T",
+  "Th33",
+  "Th38",
+  "Th43",
+  "P",
+  "gG",
+  "gD"
+ ],
+ "coef": [
+  0.055197495273277684,
+  -8.719891606632487,
+  -11.283080873826547,
+  1.777345499039318,
+  -5.8732762910416945,
+  -11.615929451035191,
+  -258.91039209401373,
+  128.50810755028309
+ ],
+ "n_train_segments": 22,
+ "train_files": [
+  "12Levelincomplete",
+  "12level complete",
+  "AIMNet fsb001 data 2026-10-15_16-25-29",
+  "AIMNet fsb001 data 2026-10-19_16-15-32",
+  "AIMNet fsb001 data 2026-10-19_18-53-51",
+  "AIMNet fsb001 data 2026-10-19_19-38-26",
+  "AIMNet fsb001 data 2026-10-21_10-20-55",
+  "AIMNet fsb001 data 2026-10-22_11-22-37",
+  "AIMNet fsb001 data 2026-10-26_10-35-49",
+  "AIR_HUMI",
+  "AIR_TEMP",
+  "FourLevelsComplete",
+  "HighFlowRateTest",
+  "LowFlowRateTest",
+  "N2_TEMP_FLOW",
+  "NoMethane1",
+  "NoMethane2PressureAir",
+  "NoMethane2PressureN2",
+  "NoMethane3",
+  "NoMethaneONOFF",
+  "NoMethaneTempLowtoHigh"
+ ]
+}

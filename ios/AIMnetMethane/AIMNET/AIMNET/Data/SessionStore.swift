@@ -90,7 +90,7 @@ final class SessionStore: ObservableObject {
                 temperatureC: 24.4 + sin(phase / 2) * 0.6,
                 humidityRH: 42.0 + cos(phase / 3) * 2.4
             )
-            reading.modelKey = K96ModelSpec.aimnet17.key
+            reading.modelKey = "AIMNet_1.7"
             reading.ppmRaw = ppm
             reading.zeroed = true
             reading.modelState = "bench"
